@@ -53,6 +53,33 @@ You can use either `/ec` or `/ac` in the AI Dungeon action input bar:
 
 ---
 
+## In-Game Configuration Card (`*EC` Options)
+
+Once enabled in your adventure, a pinned story card titled **"Configure Auto-Cards"** allows you to customize settings in real time. Options labeled with **`*EC`** are specific to Entity Cards features:
+
+| Option | Default | Description |
+|---|---|---|
+| `*EC Operating Mode:` | `"Entity Cards"` | Toggle between `"Entity Cards"` and `"Classic Auto-Cards"` |
+| `*EC Context Header:` | `"Named Entities (NER):"` | Custom header replacing `"World Lore:"` in context |
+| `*EC Raw AI Prompt Mode:` | `true` | Preserves structured JellyFish prompt without prose conversion |
+| `*EC Raw AI Response Mode:` | `true` | Preserves archetype template formatting without forced bulleting |
+| `*EC Auto-Type Story Cards:` | `true` | Automatically assigns native story card `type` (`Person`, `Location`, etc.) |
+| `*EC Use custom story card container:` | `true` | Wraps entity cards inside `{ Entity: ... }` blocks |
+| `*EC Custom container open string:` | `"{ Entity: "` | Opening string for story card containers |
+| `*EC Custom container close string:` | `"\n}"` | Closing string for story card containers |
+| `*EC Custom container AI begin sentinel:` | `"ENTITY_BEGIN"` | Boundary marker returned by AI |
+| `*EC Custom container AI end sentinel:` | `"ENTITY_END"` | Boundary marker returned by AI |
+| `*EC Trim card phrase frag:` | `true` | Smart fragment cleanup preventing cut-offs on abbreviations |
+| `*EC Trim card quote frag:` | `true` | Strips trailing unclosed quotes and parentheses |
+| `*EC Strip card asterisks:` | `true` | Removes markdown asterisks from generated card entries |
+| `*EC Prettify card em dashes:` | `true` | Standardizes hyphens to clean em dashes |
+| `*EC Log raw AI entry data:` | `false` | Debug log for raw card generation text |
+| `*EC Log raw AI memory data:` | `false` | Debug log for raw card memory summarization |
+
+*(Note: Settings parsing is fully flexible and case/prefix-tolerant, so editing options with or without the `*EC` label will work identically.)*
+
+---
+
 ## Scenario Script Installation Guide
 
 1. Open the [AI Dungeon website](https://aidungeon.com/) on PC (or view as desktop if mobile-only).
