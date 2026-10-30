@@ -1,79 +1,125 @@
-# Auto-Cards
-Made by LewdLeah ❤️
+# Entity Cards
+
+**An extension of [Auto-Cards](https://github.com/LewdLeah/Auto-Cards) by LewdLeah ❤️**
+
+---
+
+### Attribution & Acknowledgments
+
+> **Original Creator:** [LewdLeah](https://play.aidungeon.com/profile/LewdLeah) ([LewdLeah/Auto-Cards](https://github.com/LewdLeah/Auto-Cards))  
+> All core background automation, turn monitoring, memory summarization and compression, title detection algorithms, and scenario script architecture were designed and built by LewdLeah. Please check out and star the [original Auto-Cards repository](https://github.com/LewdLeah/Auto-Cards)! ❤️
+>
+> **Entity Cards Fork:** Developed by Randy Viosca to extend Auto-Cards with structured Named Entity Recognition (NER), story card containerization, typed card auto-detection, and flexible prompt/response controls.
+
+---
+
 ## Overview
-Auto-Cards is a plug-and-play scenario script for AI Dungeon that watches your story and automatically writes plot-relevant story cards during normal gameplay. My primary goal was to address the "object permanence problem" by extending story cards and memories with deeper automation. Auto-Cards builds a living reference of your adventure's world as you go.
-## Main Features
-- Object permanence! (sort of)
-- Simple and easy to use, full background automation allows you to focus on gameplay
-- Detects named entities from your story and periodically writes new cards
-- Smart long-term memory updates and summaries for important cards
-- Fully customizable AI card generation and memory summarization prompts
-- Suitable for both free and premium AI Dungeon users alike
-- Optional in-game commands to manually direct the card generation process
-- Optional in-game scripting interface (LSIv2)
-- Optional API for other creators to utilize
-## Permission
-Auto-Cards is both free and open source for anyone to use within their own scenarios or scripts, even including published works. General-purpose usefulness and compatibility were my top design priorities. You have my full permission to use, copy, or modify Auto-Cards. Please be respectful of the fact that not everyone wants to use Auto-Cards, so never beg, demand, harass, or otherwise annoy creators about installing Auto-Cards into their scenarios. Now, please enjoy! ❤️
+
+**Entity Cards** is a scenario script for [AI Dungeon](https://aidungeon.com/) that builds upon LewdLeah's **Auto-Cards** engine. While Auto-Cards automatically generates living background lore and summarizes long-term memories, Entity Cards extends this by structuring lore entries into typed **Named Entities** (Person, Organization, Location, Event, or Thing) using high-density character archetypes, MBTI profiles, and container wrappers.
+
+You can switch between **Entity Cards** mode and **Classic Auto-Cards** mode at any time with a single setting or command.
+
+---
+
+## What Entity Cards Adds to Auto-Cards
+
+* **Named Entity Recognition (NER):** Detects entities and categorizes them into 5 distinct types: `Person`, `Organization`, `Location`, `Event`, or `Thing`.
+* **JellyFish (JFSH) AI Prompting:** A structured pseudo-language template designed for high information density, including MBTI personality profiles, character archetypes, physical descriptions, and concise traits.
+* **Automatic Story Card Typing:** Automatically extracts the entity category and assigns AI Dungeon's native story card `type` property (e.g., categorizing as "Person" instead of a generic tag).
+* **Story Card Encapsulation / Containers:** Optional `{ Entity: ... }` boundary wrappers with `ENTITY_BEGIN` and `ENTITY_END` sentinels to keep story card formatting clean and contained.
+* **Dynamic Context Header:** Automatically replaces `"World Lore:"` with a customizable header (default `"Named Entities (NER):"`) during context building, without needing manual edits to your `Context` script tab.
+* **One-Click Mode Switcher:** Seamlessly toggle between `Entity Cards` and `Classic Auto-Cards` at any time—either from the in-game *"Configure"* story card or via the `/ec mode` command.
+* **Smart Fragment Trimming:** Intelligent end-of-generation cleanup that detects abbreviations (`Mr.`, `Dr.`, `U.S.`) to avoid false phrase cuts, while stripping dangling sentences and unclosed quotes/brackets.
+* **Dual Script & Command Aliases:** Call either `EntityCards(...)` or `AutoCards(...)` in your scenario scripts, and use either `/ec` or `/ac` in-game commands.
+
+---
+
+## In-Game Commands
+
+You can use either `/ec` or `/ac` in the AI Dungeon action input bar:
+
+| Command | Description |
+|---|---|
+| `/ec` | Triggers immediate card generation if valid titles exist in recent turns |
+| `/ec mode entity` | Switches the engine to **Entity Cards** mode (NER, JFSH prompt, containerization) |
+| `/ec mode classic` | Switches the engine to **Classic Auto-Cards** mode (prose prompt, bulleted lists) |
+| `/ec header <text>` | Sets a custom context header (e.g., `/ec header Codex Entities:`) |
+| `/ec <Title>` | Manually directs card generation for a specific title |
+| `/ec <Title> / {Details}` | Generates a card for a title with additional guidance details |
+| `/ec redo <Title>` | Regenerates an existing story card |
+| `/ec redo all` | Regenerates all automatic story cards |
+
+*(Classic `/ac` commands remain 100% compatible and functional.)*
+
+---
+
 ## Scenario Script Installation Guide
-1. Use the [AI Dungeon website](https://aidungeon.com/) on PC (or view as desktop if mobile-only)
-2. [Create a new scenario](https://help.aidungeon.com/faq/what-are-scenarios) or edit one of your existing scenarios
-3. Open the `DETAILS` tab at the top while editing your scenario
-4. Scroll down to `Scripting` and toggle ON → `Scripts Enabled`
-5. Select `EDIT SCRIPTS`
-6. Select the `Input` tab on the left
-7. Delete all code within said tab
-8. Copy and paste the following code into your empty `Input` tab:
+
+1. Open the [AI Dungeon website](https://aidungeon.com/) on PC (or view as desktop if mobile-only).
+2. [Create a new scenario](https://help.aidungeon.com/faq/what-are-scenarios) or edit one of your existing scenarios.
+3. Open the **DETAILS** tab at the top while editing your scenario.
+4. Scroll down to **Scripting** and toggle ON → **Scripts Enabled**.
+5. Select **EDIT SCRIPTS**.
+
+### 1. Input Tab
+Select the **Input** tab on the left, delete any existing code, and paste:
 ```javascript
-// Your "Input" tab should look like this
+// Your "Input" tab
 const modifier = (text) => {
   // Your other input modifier scripts go here (preferred)
-  text = AutoCards("input", text);
+  text = EntityCards("input", text);
   // Your other input modifier scripts go here (alternative)
   return {text};
 };
 modifier(text);
 ```
-9. Select the `Context` tab on the left
-10. Delete all code within said tab
-11. Copy and paste the following code into your empty `Context` tab:
+
+### 2. Context Tab
+Select the **Context** tab on the left, delete any existing code, and paste:
 ```javascript
-// Your "Context" tab should look like this
+// Your "Context" tab
 const modifier = (text) => {
   // Your other context modifier scripts go here (preferred)
-  [text, stop] = AutoCards("context", text, stop);
+  [text, stop] = EntityCards("context", text, stop);
   // Your other context modifier scripts go here (alternative)
   return {text, stop};
 };
 modifier(text);
 ```
-12. Select the `Output` tab on the left
-13. Delete all code within said tab
-14. Copy and paste the following code into your empty `Output` tab:
+
+### 3. Output Tab
+Select the **Output** tab on the left, delete any existing code, and paste:
 ```javascript
-// Your "Output" tab should look like this
+// Your "Output" tab
 const modifier = (text) => {
   // Your other output modifier scripts go here (preferred)
-  text = AutoCards("output", text);
+  text = EntityCards("output", text);
   // Your other output modifier scripts go here (alternative)
   return {text};
 };
 modifier(text);
 ```
-15. Select the `Library` tab on the left
-16. Delete all code within said tab
-17. Open my full Library code (hyperlink below) in a new browser tab
-- [Library code](./src/library.js)
-18. Copy my *full* code from the page above and paste into your empty `Library` tab
-19. Click the big yellow `SAVE` button in the top right corner
-20. And you're done!
 
-Keep in mind that any adventures played from your scenario will include Auto-Cards (this also applies retroactively)
+### 4. Library Tab
+1. Select the **Library** tab on the left and delete all existing code.
+2. Open the full [Library code](./src/library.js) in a new browser tab.
+3. Copy the full code and paste it into your empty **Library** tab.
+4. Click the yellow **SAVE** button in the top right corner.
+
+*(Note: `AutoCards(...)` also works identically if your scenario already has Auto-Cards installed—you only need to update the `Library` tab!)*
+
+---
+
+## Permission & License
+
+Entity Cards is open-source and free to use in your own scenarios or scripts. General-purpose usefulness, interoperability, and compatibility are top priorities. You have full permission to use, copy, or modify Entity Cards. Please be respectful of the fact that not everyone wants to use automated cards, and never harass creators about installing scripts. Please enjoy! ❤️
+
+---
+
 ## Useful Links
-### Simple demo scenario
-- [Auto-Cards](https://play.aidungeon.com/scenario/Ddt0Akd-lVtj/auto-cards)
-### My AI Dungeon profile page
-- [LewdLeah](https://play.aidungeon.com/profile/LewdLeah)
-### Auto-Cards discussion thread
-- [Auto-Cards script testing & feedback](https://discord.com/channels/903327676884979802/1347300413652734064/1347300413652734064)
-- [AI Dungeon official Discord server invite](https://discord.gg/MXNqpSbuZT) (required to access the first link)
-- Feel free to ping me anytime @LewdLeah if you'd like to chat or share ideas. But please remember this is a personal passion project for me, something I do because I enjoy it, not as a job. Your kindness, patience, and love mean so much to me~ ❤️
+
+### Original Auto-Cards by LewdLeah
+* **Auto-Cards Scenario Demo:** [play.aidungeon.com/scenario/Ddt0Akd-lVtj/auto-cards](https://play.aidungeon.com/scenario/Ddt0Akd-lVtj/auto-cards)
+* **LewdLeah's Profile:** [play.aidungeon.com/profile/LewdLeah](https://play.aidungeon.com/profile/LewdLeah)
+* **Upstream Auto-Cards Repo:** [github.com/LewdLeah/Auto-Cards](https://github.com/LewdLeah/Auto-Cards)
+* **Official AI Dungeon Discord:** [discord.gg/MXNqpSbuZT](https://discord.gg/MXNqpSbuZT)
