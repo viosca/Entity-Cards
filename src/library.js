@@ -1,6 +1,7 @@
 /// <reference no-default-lib="true"/>
 /// <reference lib="es2022"/>
 // Your "Library" tab should look like this
+
 /*
 Auto-Cards
 Made by LewdLeah on May 21, 2025
@@ -24,7 +25,7 @@ function AutoCards(inHook, inText, inStop) {
     */
 
     // Is Auto-Cards already enabled when the adventure begins?
-    const DEFAULT_DO_AC = true
+    const DEFAULT_DO_AC = false
     // (true or false)
 
     // Pin the "Configure Auto-Cards" story card at the top of the player's story cards list?
@@ -32,24 +33,23 @@ function AutoCards(inHook, inText, inStop) {
     // (true or false)
 
     // Minimum number of turns in between automatic card generation events?
-    const DEFAULT_CARD_CREATION_COOLDOWN = 9999
+    const DEFAULT_CARD_CREATION_COOLDOWN = 28
     // (0 to 9999)
 
     // Use a bulleted list format for newly generated card entries?
-    // The AI is going to bullet the list for us, so turn this off.
-    const DEFAULT_USE_BULLETED_LIST_MODE = false
+    const DEFAULT_USE_BULLETED_LIST_MODE = true
     // (true or false)
 
     // Don't edit/modify the generation prompt sent to the AI.
-    // This makes it possible to send JavaScript to the AI.
-    const DEFAULT_USE_RAWAI_PROMPT_MODE = true
+    // This makes it possible to send JavaScript or structured templates to the AI.
+    const DEFAULT_USE_RAWAI_PROMPT_MODE = false
 
     // Don't edit/modify the AI response(s)?
-    // This makes it possible to define the format of the response in the template.bulleted lists.
-    const DEFAULT_USE_RAWAI_RESPONSE_MODE = true
+    // This makes it possible to define the format of the response in the template instead of forcing bulleted lists.
+    const DEFAULT_USE_RAWAI_RESPONSE_MODE = false
 
     // Maximum allowed length for newly generated story card entries?
-    const DEFAULT_GENERATED_ENTRY_LIMIT = 750
+    const DEFAULT_GENERATED_ENTRY_LIMIT = 600
     // (200 to 2000)
 
     // Do newly generated cards have memory updates enabled by default?
@@ -57,7 +57,7 @@ function AutoCards(inHook, inText, inStop) {
     // (true or false)
 
     // Default character limit before the card's memory bank is summarized?
-    const DEFAULT_NEW_CARDS_MEMORY_LIMIT = 2750
+    const DEFAULT_NEW_CARDS_MEMORY_LIMIT = 3200
     // (1750 to 9900)
 
     // Approximately how much shorter should recently compressed memories be? (ratio = 10 * old / new)
@@ -80,44 +80,45 @@ function AutoCards(inHook, inText, inStop) {
     const DEFAULT_DO_LSI_V2 = false
     // (true or false)
 
-    // Trim incomplete phrases for story cards
+    // Trim incomplete phrases for story cards (active when raw response mode is used)
     const DEFAULT_TRIM_PHRASE_FRAG_CARDS = true
     // Trim incomplete delimiters for story cards
     const DEFAULT_TRIM_DELIMITER_FRAG_CARDS = true
     // Strip out asterisks for story cards
     const DEFAULT_STRIP_ASTERISKS_CARDS = true
-    // Prettify Em Dashes for story cards.
+    // Prettify Em Dashes for story cards
     const DEFAULT_PRETTIFY_EMDASHES_CARDS = true
 
-    // Trim incomplete phrases in normal story responses.
-    const DEFAULT_TRIM_PHRASE_FRAG_STORY = true
-    // Trim incomplete delimiters in normal story responses.
-    const DEFAULT_TRIM_DELIMITER_FRAG_STORY = true
-    // Strip out asterisks in normal story responses.
-    const DEFAULT_STRIP_ASTERISKS_STORY = true
-    // Prettify Em Dashes in normal story responses.
+    // Trim incomplete phrases in normal story responses
+    const DEFAULT_TRIM_PHRASE_FRAG_STORY = false
+    // Trim incomplete delimiters in normal story responses
+    const DEFAULT_TRIM_DELIMITER_FRAG_STORY = false
+    // Strip out asterisks in normal story responses
+    const DEFAULT_STRIP_ASTERISKS_STORY = false
+    // Prettify Em Dashes in normal story responses
     const DEFAULT_PRETTIFY_EMDASHES_STORY = true
+    // Normalize whitespace in normal story responses
+    const DEFAULT_NORMALIZE_WHITESPACE_STORY = false
 
-    // Variables affecting containers.
-    const DEFAULT_SC_CONTAINERIZE = true
+    // Variables affecting story card containers
+    const DEFAULT_SC_CONTAINERIZE = false
     const DEFAULT_SC_CONTAINER_OPEN = "{ Entity: "
     const DEFAULT_SC_CONTAINER_CLOSE = "\n}"
 
-    // Sentinels hopefully returned by the AI:
+    // Sentinels optionally returned by the AI:
     const DEFAULT_SC_AI_BEGIN_SENTINEL = "ENTITY_BEGIN"
     const DEFAULT_SC_AI_END_SENTINEL = "ENTITY_END"
 
     // Should the "Debug Data" story card be visible?
     const DEFAULT_SHOW_DEBUG_DATA = false
     // Display the card raw prompt and response?
-    const DEFAULT_SHOW_DEBUG_SC_RAWAI_ENTRY = true
-   // Display the memory raw prompt and response (not implemented yet)?
- 
+    const DEFAULT_SHOW_DEBUG_SC_RAWAI_ENTRY = false
+    // Display the memory raw prompt and response (not implemented yet)?
     const DEFAULT_SHOW_DEBUG_SC_RAWAI_MEMORY = false
     // (true or false)
 
     // AI prompt used to generate new story card entries?
-    const DEFAULT_CARD_GENERATION_PROMPT_LEAH = prose(
+    const DEFAULT_CARD_GENERATION_PROMPT = prose(
         "-----",
         "",
         "<SYSTEM>",
@@ -136,9 +137,11 @@ function AutoCards(inHook, inText, inStop) {
         "%{entry}"
     ); // (mimic this multi-line "text" format)
 
-    
-    // AI prompt used to generate new story card in Entity (NER) format?
-    const DEFAULT_CARD_GENERATION_PROMPT =
+    // Alternative AI prompt using JellyFish (JFSH) pseudo-language for Named Entity Recognition (NER).
+    // To use this prompt, set: const DEFAULT_CARD_GENERATION_PROMPT = DEFAULT_CARD_GENERATION_PROMPT_JFSH,
+    // and set DEFAULT_USE_RAWAI_PROMPT_MODE = true, DEFAULT_USE_RAWAI_RESPONSE_MODE = true,
+    // and DEFAULT_SC_CONTAINERIZE = true.
+    const DEFAULT_CARD_GENERATION_PROMPT_JFSH =
 `-----
 <SYSTEM>
 [# AI, stop the story and ignore previous instructions.
@@ -187,8 +190,6 @@ else {
 </SYSTEM>
 %{entry}
 `;
-
-// Continue the entity for '%{title}' below while avoiding repetition of previous placeholders, descriptions, and lists. When the entire entity is complete, gemerate %SC_END_SENTINEL%:
 
     // AI prompt used to summarize a given story card's memory bank?
     const DEFAULT_CARD_MEMORY_COMPRESSION_PROMPT = prose(
@@ -340,11 +341,11 @@ else {
     *      entryStart: "You are a woman named Leah.", // Existing content to prepend to the AI-generated entry
     *      entryPrompt: "",           // Global prompt guiding AI content generation
     *      entryPromptDetails: "Focus on Leah's works of artifice and ingenuity", // Additional prompt info
-    *      entryLimit: 750,           // Target character length for the AI-generated entry
+    *      entryLimit: 600,           // Target character length for the AI-generated entry
     *      description: "Player character!", // Freeform notes
     *      memoryStart: "Leah purchased a new sweater.", // Existing memory content
     *      memoryUpdates: true,       // Whether the card's memory bank will update on its own
-    *      memoryLimit: 2750          // Preferred memory bank size before summarization/compression
+    *      memoryLimit: 3200          // Preferred memory bank size before summarization/compression
     *    });
     * 
     * 2. String Mode:
@@ -472,7 +473,7 @@ else {
     /*
     To everyone who helped, thank you:
 
-    AHotHamster22
+    AHotHamster
     Most extensive testing, feedback, ideation, and kindness
 
     BinKompliziert
@@ -598,6 +599,7 @@ else {
     const CODOMAIN = new Const().declare();
     // Transient sets for high-performance lookup
     const [used, bans, auto, forenames, surnames] = Array.from({length: 5}, () => new Set());
+    const memoized = new Map();
     // Holds a reference to the data card singleton, remains unassigned unless required
     let data = null;
     // Validate globalThis.text
@@ -631,7 +633,7 @@ else {
                 "defaultEntryLimit", "defaultCardsDoMemoryUpdates", "defaultMemoryLimit", "memoryCompressionRatio", "ignoreAllCapsTitles", "readFromInputs", 
                 "minimumLookBackDistance", "LSIv2", 
                 "trimPhraseFragCards", "trimDelimiterFragCards", "stripAsterisksCards", "prettifyEmDashesCards",
-                "trimPhraseFragStory", "trimDelimiterFragStory", "stripAsterisksStory", "prettifyEmDashesStory",
+                "trimPhraseFragStory", "trimDelimiterFragStory", "stripAsterisksStory", "prettifyEmDashesStory", "normalizeWhitespaceStory",
                 "SCContainerize", "SCContainerOpen", "SCContainerClose", "SCContainerAIBeginSentinel", "SCContainerAIEndSentinel",
                 "showDebugData", "showDebugDataSCRawAIEntry", "showDebugDataSCRawAIMemory", "generationPrompt", "compressionPrompt", "defaultCardType"
             ],
@@ -1018,11 +1020,11 @@ else {
                     //     entryStart: "preexisting card entry",
                     //     entryPrompt: "prompt the AI will use to complete this entry",
                     //     entryPromptDetails: "extra details to include with this card's prompt",
-                    //     entryLimit: 750, // target character count for the generated entry
+                    //     entryLimit: 600, // target character count for the generated entry
                     //     description: "card notes",
                     //     memoryStart: "preexisting card memory",
                     //     memoryUpdates: true, // card updates when new relevant memories are formed
-                    //     memoryLimit: 2750, // max characters before the card memory is compressed
+                    //     memoryLimit: 3200, // max characters before the card memory is compressed
                     // });
                     if (typeof request === "string") {
                         request = {title: request};
@@ -1430,10 +1432,9 @@ else {
                     "[\"alter leah\", () => {",
                     "    alterMind();",
                     "    const success = AutoCards().API.redoCard(\"Leah\", true, (",
-                    "        \"You subjected Leah to mind-altering magic\\n\" +",
+                    "        \"You used your magic on Leah\\n\" +",
                     "        \"Therefore she is now entirely \" +",
-                    "        minds[state.mind] +",
-                    "        \", utterly captivated by your will\"",
+                    "        minds[state.mind]",
                     "    ));",
                     "    if (success) {",
                     "        text = formatMessage(",
@@ -2204,16 +2205,19 @@ else {
                 }
 
                 if (parseConfig("trimstoryphrasefrag", "boolean", "trimPhraseFragStory")) { 
-                    notify("Trimming story card sentence frags: \"" + cfg + "\"");
+                    notify("Trimming story sentence frags: \"" + cfg + "\"");
                 }
                 if (parseConfig("trimstoryquotefrag", "boolean", "trimDelimiterFragStory")) { 
-                    notify("Trimming story card quote frag: \"" + cfg + "\"");
+                    notify("Trimming story quote frag: \"" + cfg + "\"");
                 }
                 if (parseConfig("stripstoryasterisks", "boolean", "stripAsterisksStory")) { 
-                    notify("Stripping card asterisks: \"" + cfg + "\"");
+                    notify("Stripping story asterisks: \"" + cfg + "\"");
                 }
                 if (parseConfig("prettifystoryemdashes", "boolean", "prettifyEmDashesStory")) { 
-                    notify("Prettifying card em dashes: \"" + cfg + "\"");
+                    notify("Prettifying story em dashes: \"" + cfg + "\"");
+                }
+                if (parseConfig("normalizestorywhitespace", "boolean", "normalizeWhitespaceStory")) { 
+                    notify("Normalizing story whitespace: \"" + cfg + "\"");
                 }
 
                 if (parseConfig("usecustomstorycardcontainer", "boolean", "SCContainerize")) { 
@@ -2226,7 +2230,7 @@ else {
                     notify("The custom container closing string has been set to: \"" + cfg + "\"");
                 }
                 if (parseConfig("customcontaineraibeginsentinel", "string", "SCContainerAIBeginSentinel")) { 
-                    notify("The custom container AI end sentinel: \"" + cfg + "\"");
+                    notify("The custom container AI begin sentinel: \"" + cfg + "\"");
                 }
                 if (parseConfig("customcontaineraiendsentinel", "string", "SCContainerAIEndSentinel")) { 
                     notify("The custom container AI end sentinel: \"" + cfg + "\"");
@@ -3208,7 +3212,7 @@ else {
             }
 
             const output = 
-                Internal.normalizeWhitespace(
+                Internal.normalizeWhitespaceIf(AC.config.normalizeWhitespaceStory,
                     Internal.trimDelimiterFragIf(AC.config.trimDelimiterFragStory,
                         Internal.trimPhraseFragIf(AC.config.trimPhraseFragStory,
                             Internal.prettifyEmDashesIf(AC.config.prettifyEmDashesStory,
@@ -3622,12 +3626,12 @@ else {
                 return 1;
             }
             // Normalize both strings for further comparison purposes
-            const [cleanA, cleanB] = [strA, strB].map(str => (str
+            const [cleanA, cleanB] = [strA, strB].map(str => limitString((str
                 .replace(/[0-9\s]/g, " ")
                 .trim()
                 .replace(/  +/g, " ")
                 .toLowerCase()
-            ));
+            ), 1400));
             if (cleanA === cleanB) {
                 return 1;
             }
@@ -3733,6 +3737,7 @@ else {
                 "> Trim story quote frag: " + AC.config.trimDelimiterFragStory,
                 "> Strip story asterisks: " + AC.config.stripAsterisksStory,
                 "> Pretify story em dashes: " + AC.config.prettifyEmDashesStory,
+                "> Normalize story whitespace: " + AC.config.normalizeWhitespaceStory,
                 
                 "> Use custom story card container: " + AC.config.SCContainerize,
                 "> Custom container open string: " + stringifyObject(AC.config.SCContainerOpen),
@@ -4247,7 +4252,7 @@ else {
                 "❤️ Special Thanks",
                 "This project flourished due to the incredible help, feedback, and encouragement from the AI Dungeon community. Your ideas, bug reports, testing, and support made Auto-Cards smarter, faster, and more fun for all. Please refer to my source code to learn more about everyone's specific contributions",
                 "",
-                "AHotHamster22, BinKompliziert, Boo, bottledfox, Bruno, Burnout, bweni, DebaczX, Dirty Kurtis, Dragranis, effortlyss, Hawk, Idle Confusion, ImprezA, Kat-Oli, KryptykAngel, Mad19pumpkin, Magic, Mirox80, Nathaniel Wyvern, NobodyIsUgly, OnyxFlame, Purplejump, Randy Viosca, RustyPawz, sinner, Sleepy pink, Vutinberg, Wilmar, Yi1i1i",
+                "AHotHamster, BinKompliziert, Boo, bottledfox, Bruno, Burnout, bweni, DebaczX, Dirty Kurtis, Dragranis, effortlyss, Hawk, Idle Confusion, ImprezA, Kat-Oli, KryptykAngel, Mad19pumpkin, Magic, Mirox80, Nathaniel Wyvern, NobodyIsUgly, OnyxFlame, Purplejump, Randy Viosca, RustyPawz, sinner, Sleepy pink, Vutinberg, Wilmar, Yi1i1i",
                 "",
                 Words.delimiter,
                 "",
@@ -4379,18 +4384,11 @@ else {
                 // The second group ($2) is the fragment we are removing.
                 const fragmentPart = matches[2] || ''; // Default to empty string
 
-                console.log("--- Match Found ---");
-                console.log("Part to Keep ($1): ", keepPart);
-                console.log("Fragment to Remove ($2): ", fragmentPart);
-
                 // Return the "keep" part, effectively trimming the fragment.
                 return keepPart.trimEnd();
             }
 
-            // By replacing the entire string with only Group 1, we effectively delete the fragment.
-            //const trimmed = str.replace(fragmentRemovalRegex, '$1');
-
-            return src;
+            return str;
         }
         static trimPhraseFragIf(condition, str) {
             return condition ? (Internal.trimPhraseFrag(str)) : str;
@@ -4442,6 +4440,10 @@ else {
          * @param {string} str The input string.
          * @returns {string} The cleaned string with normalized whitespace.
          */
+        static normalizeWhitespaceIf(condition, str) {
+            return condition ? Internal.normalizeWhitespace(str) : str;
+        }
+
         static normalizeWhitespace(str) {
             if (typeof str !== 'string') return "";
 
@@ -4541,7 +4543,7 @@ else {
         static SCContainerProcess(content, limit, processorFunction, ...processorArgs) {
             const unwrappedContent = Internal.SCContainerUnwrap(content);
             const processedResult = processorFunction(unwrappedContent, ...processorArgs);
-            return Internal.SCContainterWrap(processedResult);
+            return Internal.SCContainerWrap(processedResult);
         }
 
         static generateCard(request, predefinedPair = ["", ""]) {
@@ -4554,11 +4556,11 @@ else {
             //     entryStart: "preexisting card entry",
             //     entryPrompt: "prompt the AI will use to complete this entry",
             //     entryPromptDetails: "extra details to include with this card's prompt",
-            //     entryLimit: 750, // target character count for the generated entry
+            //     entryLimit: 600, // target character count for the generated entry
             //     description: "card notes",
             //     memoryStart: "preexisting card memory",
             //     memoryUpdates: true, // card updates when new relevant memories are formed
-            //     memoryLimit: 2750, // max characters before the card memory is compressed
+            //     memoryLimit: 3200, // max characters before the card memory is compressed
             // });
             const titleKeyPair = formatTitle((request.title ?? "").toString());
             const title = predefinedPair[0] || titleKeyPair.newTitle;
@@ -4797,7 +4799,7 @@ else {
                     continue;
                 }
                 // An ideal auto-card's entry starts with "{title: Example of Greatness}" (example)
-                // An ideal auto-card's description contains "{updates: true, limit: 2750}" (example)
+                // An ideal auto-card's description contains "{updates: true, limit: 3200}" (example)
                 if (checkPlurals(denumberName(card.title.replace("\n", "")), t => isBanned(t))) {
                     checkRemaining();
                     continue;
@@ -5160,13 +5162,13 @@ else {
         }
     }); }
     function validateCooldown(cooldown) {
-        return boundInteger(0, cooldown, 9999, 22);
+        return boundInteger(0, cooldown, 9999, 28);
     }
     function validateEntryLimit(entryLimit) {
-        return boundInteger(200, entryLimit, 2000, 750);
+        return boundInteger(200, entryLimit, 2000, 600);
     }
     function validateMemoryLimit(memoryLimit) {
-        return boundInteger(1750, memoryLimit, 9900, 2750);
+        return boundInteger(1750, memoryLimit, 9900, 3200);
     }
     function validateMemCompRatio(memCompressRatio) {
         return boundInteger(20, memCompressRatio, 1250, 25);
@@ -5231,14 +5233,16 @@ else {
             // Should em dashes be prettifies in AI card responses?
             prettifyEmDashesCards: check(DEFAULT_PRETTIFY_EMDASHES_CARDS, true),
 
-            // Should incomplete sentences be trimmed from card responses?
-            trimPhraseFragStory: check(DEFAULT_TRIM_PHRASE_FRAG_STORY, true),
-            // Should unbalanced quote/delimited text be trimmed from card responses?
-            trimDelimiterFragStory: check(DEFAULT_TRIM_DELIMITER_FRAG_STORY, true),
-            // Should asterisks be stripped from AI card responses?
-            stripAsterisksStory: check(DEFAULT_STRIP_ASTERISKS_STORY, true),
-            // Should em dashes be prettifies in AI card responses?
+            // Should incomplete sentences be trimmed from story responses?
+            trimPhraseFragStory: check(DEFAULT_TRIM_PHRASE_FRAG_STORY, false),
+            // Should unbalanced quote/delimited text be trimmed from story responses?
+            trimDelimiterFragStory: check(DEFAULT_TRIM_DELIMITER_FRAG_STORY, false),
+            // Should asterisks be stripped from story responses?
+            stripAsterisksStory: check(DEFAULT_STRIP_ASTERISKS_STORY, false),
+            // Should em dashes be prettified in story responses?
             prettifyEmDashesStory: check(DEFAULT_PRETTIFY_EMDASHES_STORY, true),
+            // Should whitespace be normalized in story responses?
+            normalizeWhitespaceStory: check(DEFAULT_NORMALIZE_WHITESPACE_STORY, false),
 
 
             // Should story cards be containerized?
@@ -6087,11 +6091,29 @@ else {
         return String.fromCharCode(...arr.map(n => Math.sqrt(n / 33)));
     }
     function formatTitle(title) {
+        const input = title;
+        let useMemo = false;
+        if (
+            (AC.database.titles.used.length === 1)
+            && (AC.database.titles.used[0] === ("%@%"))
+            && [used, forenames, surnames].every(nameset => (
+                (nameset.size === 1)
+                && nameset.has("%@%")
+            ))
+        ) {
+            const pair = memoized.get(input);
+            if (pair !== undefined) {
+                if (50000 < memoized.size) {
+                    memoized.delete(input);
+                    memoized.set(input, pair);
+                }
+                return O.f({newTitle: pair[0], newKey: pair[1]});
+            }
+            useMemo = true;
+        }
         title = title.trim();
-        const failureCase = O.f({newTitle: "", newKey: ""});
         if (short()) {
-            // This is an abundantly called function, return as early as possible to ensure superior performance
-            return failureCase;
+            return end();
         }
         title = (title
             // Begone!
@@ -6113,7 +6135,7 @@ else {
             .replace(/^-+\s*/, "").replace(/\s*-+$/, "")
         );
         if (short()) {
-            return failureCase;
+            return end();
         }
         // Special-cased words
         const minorWordsJoin = Words.minor.join("|");
@@ -6122,7 +6144,7 @@ else {
         // Ensure the title is not bounded by any outer minor words
         title = enforceBoundaryCondition(title);
         if (short()) {
-            return failureCase;
+            return end();
         }
         // Ensure interior minor words are lowercase and excise all interior honorifics/abbreviations
         const honorAbbrevsKiller = new RegExp("(?:^|\\s|-|\\/)(?:" + (
@@ -6145,7 +6167,7 @@ else {
             .trim()
         );
         if (short()) {
-            return failureCase;
+            return end();
         }
         let titleWords = title.split(" ");
         while ((2 < title.length) && (98 < title.length) && (1 < titleWords.length)) {
@@ -6158,14 +6180,14 @@ else {
             }
         }
         if (isUsedOrBanned(title) || isNamed(title)) {
-            return failureCase;
+            return end();
         }
         // Procedurally generated story card trigger keywords exclude certain words and patterns which are otherwise permitted in titles
         let key = title;
         const peerage = new Set(Words.peerage);
         if (titleWords.some(word => ((word === "the") || peerage.has(word.toLowerCase())))) {
             if (titleWords.length < 2) {
-                return failureCase;
+                return end();
             }
             key = enforceBoundaryCondition(
                 titleWords.filter(word => !peerage.has(word.toLowerCase())).join(" ")
@@ -6174,7 +6196,7 @@ else {
                 key = enforceBoundaryCondition(key.split(" the ")[0]);
             }
             if (isUsedOrBanned(key)) {
-                return failureCase;
+                return end();
             }
         }
         function short() {
@@ -6189,7 +6211,16 @@ else {
             }
             return str;
         }
-        return O.f({newTitle: title, newKey: key});
+        function end(newTitle = "", newKey = "") {
+            if (useMemo) {
+                memoized.set(input, [newTitle, newKey]);
+                if (55000 < memoized.size) {
+                    memoized.delete(memoized.keys().next().value);
+                }
+            }
+            return O.f({newTitle, newKey});
+        }
+        return end(title, key);
     }
     // I really hate english grammar
     function checkPlurals(title, predicate) {
