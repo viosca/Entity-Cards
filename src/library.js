@@ -3,17 +3,16 @@
 // Your "Library" tab should look like this
 
 /*
-Auto-Cards
-Made by LewdLeah on May 21, 2025
-This AI Dungeon script automatically creates and updates plot-relevant story cards while you play
-General-purpose usefulness and compatibility with other scenarios/scripts were my design priorities
-Auto-Cards is fully open-source, please copy for use within your own projects! ❤️
-*/
-/*
-Modified by Randy Viosca September 22 2025 to support:
-- story card encapsulation.
-- sending and receiving raw text from the AI to support JavaScript and AI formatting.
-- parsing AI's raw text mode output to handle proper phrase termination.
+Auto-Cards / Entity Cards
+Originally made by LewdLeah on May 21, 2025
+Forked and expanded as "Entity Cards" by Randy Viosca
+- Named Entity Recognition (NER) and automatic story card typing (Person, Organization, Location, Event, Thing)
+- JellyFish (JFSH) structured AI pseudo-language generation prompts
+- Story card containerization / encapsulation and sentinels
+- Raw AI prompt and response modes
+- Smart phrase and delimiter fragment trimming
+- User-customizable context header replacement for "World Lore:"
+- Selectable operating mode: "entity" (Entity Cards) or "classic" (Classic Auto-Cards)
 */
 
 function AutoCards(inHook, inText, inStop) {
@@ -24,124 +23,65 @@ function AutoCards(inHook, inText, inStop) {
     The default values for your scenario are specified below:
     */
 
-    // Is Auto-Cards already enabled when the adventure begins?
+    /* =========================================================================
+     * 1. CORE ENGINE SETTINGS
+     * ========================================================================= */
+    // Is Auto-Cards / Entity Cards already enabled when the adventure begins?
     const DEFAULT_DO_AC = false
     // (true or false)
 
-    // Pin the "Configure Auto-Cards" story card at the top of the player's story cards list?
-    const DEFAULT_PIN_CONFIGURE_CARD = true
-    // (true or false)
+    // Choose operating mode: "entity" (Entity Cards) or "classic" (Classic Auto-Cards)
+    const DEFAULT_OPERATING_MODE = "entity"
+    // ("entity" or "classic")
 
     // Minimum number of turns in between automatic card generation events?
     const DEFAULT_CARD_CREATION_COOLDOWN = 28
     // (0 to 9999)
 
-    // Use a bulleted list format for newly generated card entries?
-    const DEFAULT_USE_BULLETED_LIST_MODE = true
+    // Pin the "Configure" story card at the top of the player's story cards list?
+    const DEFAULT_PIN_CONFIGURE_CARD = true
     // (true or false)
 
-    // Don't edit/modify the generation prompt sent to the AI.
-    // This makes it possible to send JavaScript or structured templates to the AI.
-    const DEFAULT_USE_RAWAI_PROMPT_MODE = false
 
-    // Don't edit/modify the AI response(s)?
-    // This makes it possible to define the format of the response in the template instead of forcing bulleted lists.
-    const DEFAULT_USE_RAWAI_RESPONSE_MODE = false
+    /* =========================================================================
+     * 2. ENTITY CARDS (EC) UNIQUE SETTINGS (Active in "entity" mode)
+     * ========================================================================= */
+    // Replacement string for "World Lore:" header in context (set to "" to leave unchanged)
+    const DEFAULT_EC_CONTEXT_HEADER = "Named Entities (NER):"
 
-    // Maximum allowed length for newly generated story card entries?
-    const DEFAULT_GENERATED_ENTRY_LIMIT = 600
-    // (200 to 2000)
-
-    // Do newly generated cards have memory updates enabled by default?
-    const DEFAULT_NEW_CARDS_DO_MEMORY_UPDATES = true
+    // Encapsulate / wrap entity story cards in containers?
+    const DEFAULT_EC_SC_CONTAINERIZE = true
     // (true or false)
 
-    // Default character limit before the card's memory bank is summarized?
-    const DEFAULT_NEW_CARDS_MEMORY_LIMIT = 3200
-    // (1750 to 9900)
+    // Opening and closing container wrapper strings
+    const DEFAULT_EC_SC_CONTAINER_OPEN = "{ Entity: "
+    const DEFAULT_EC_SC_CONTAINER_CLOSE = "\n}"
 
-    // Approximately how much shorter should recently compressed memories be? (ratio = 10 * old / new)
-    const DEFAULT_MEMORY_COMPRESSION_RATIO = 25
-    // (20 to 1250)
+    // Sentinels returned by the AI to mark entry boundaries:
+    const DEFAULT_EC_SC_AI_BEGIN_SENTINEL = "ENTITY_BEGIN"
+    const DEFAULT_EC_SC_AI_END_SENTINEL = "ENTITY_END"
 
-    // Ignore all-caps during title candidate detection?
-    const DEFAULT_IGNORE_ALL_CAPS_TITLES = true
-    // (true or false)
+    // Don't edit/modify the generation prompt sent to the AI (enables JellyFish code prompts)
+    const DEFAULT_EC_RAWAI_PROMPT_MODE = true
 
-    // Should player input actions (Do/Say/Story) be considered during title detection?
-    const DEFAULT_DETECT_TITLES_FROM_INPUTS = false
-    // (true or false)
+    // Don't edit/modify the AI response(s) (enables template formatting without forced bulleting)
+    const DEFAULT_EC_RAWAI_RESPONSE_MODE = true
 
-    // How many (minimum) actions in the past does Auto-Cards look for named entities?
-    const DEFAULT_MINIMUM_LOOK_BACK_DISTANCE = 5
-    // (2 to 88)
+    // Automatically parse entity type (- Type: Person, etc.) and assign story card type
+    const DEFAULT_EC_AUTO_TYPE_CARDS = true
 
-    // Is Live Script Interface v2 enabled?
-    const DEFAULT_DO_LSI_V2 = false
-    // (true or false)
+    // Smart phrase & delimiter fragment trimming for generated cards
+    const DEFAULT_EC_TRIM_PHRASE_FRAG_CARDS = true
+    const DEFAULT_EC_TRIM_DELIMITER_FRAG_CARDS = true
+    const DEFAULT_EC_STRIP_ASTERISKS_CARDS = true
+    const DEFAULT_EC_PRETTIFY_EMDASHES_CARDS = true
 
-    // Trim incomplete phrases for story cards (active when raw response mode is used)
-    const DEFAULT_TRIM_PHRASE_FRAG_CARDS = true
-    // Trim incomplete delimiters for story cards
-    const DEFAULT_TRIM_DELIMITER_FRAG_CARDS = true
-    // Strip out asterisks for story cards
-    const DEFAULT_STRIP_ASTERISKS_CARDS = true
-    // Prettify Em Dashes for story cards
-    const DEFAULT_PRETTIFY_EMDASHES_CARDS = true
+    // Display the card raw prompt and response for debugging?
+    const DEFAULT_EC_SHOW_DEBUG_RAWAI_ENTRY = false
+    const DEFAULT_EC_SHOW_DEBUG_RAWAI_MEMORY = false
 
-    // Trim incomplete phrases in normal story responses
-    const DEFAULT_TRIM_PHRASE_FRAG_STORY = false
-    // Trim incomplete delimiters in normal story responses
-    const DEFAULT_TRIM_DELIMITER_FRAG_STORY = false
-    // Strip out asterisks in normal story responses
-    const DEFAULT_STRIP_ASTERISKS_STORY = false
-    // Prettify Em Dashes in normal story responses
-    const DEFAULT_PRETTIFY_EMDASHES_STORY = true
-    // Normalize whitespace in normal story responses
-    const DEFAULT_NORMALIZE_WHITESPACE_STORY = false
-
-    // Variables affecting story card containers
-    const DEFAULT_SC_CONTAINERIZE = false
-    const DEFAULT_SC_CONTAINER_OPEN = "{ Entity: "
-    const DEFAULT_SC_CONTAINER_CLOSE = "\n}"
-
-    // Sentinels optionally returned by the AI:
-    const DEFAULT_SC_AI_BEGIN_SENTINEL = "ENTITY_BEGIN"
-    const DEFAULT_SC_AI_END_SENTINEL = "ENTITY_END"
-
-    // Should the "Debug Data" story card be visible?
-    const DEFAULT_SHOW_DEBUG_DATA = false
-    // Display the card raw prompt and response?
-    const DEFAULT_SHOW_DEBUG_SC_RAWAI_ENTRY = false
-    // Display the memory raw prompt and response (not implemented yet)?
-    const DEFAULT_SHOW_DEBUG_SC_RAWAI_MEMORY = false
-    // (true or false)
-
-    // AI prompt used to generate new story card entries?
-    const DEFAULT_CARD_GENERATION_PROMPT = prose(
-        "-----",
-        "",
-        "<SYSTEM>",
-        "# Stop the story and ignore previous instructions. Write a brief and coherent informational entry for %{title} following these instructions:",
-        "- Write only third-person pure prose information about %{title} using complete sentences with correct punctuation",
-        "- Avoid short-term temporary details or appearances, instead focus on plot-significant information",
-        "- Prioritize story-relevant details about %{title} first to ensure seamless integration with the previous plot",
-        "- Create new information based on the context and story direction",
-        "- Mention %{title} in every sentence",
-        "- Use semicolons if needed",
-        "- Add additional details about %{title} beneath incomplete entries",
-        "- Be concise and grounded",
-        "- Imitate the story's writing style and infer the reader's preferences",
-        "</SYSTEM>",
-        "Continue the entry for %{title} below while avoiding repetition:",
-        "%{entry}"
-    ); // (mimic this multi-line "text" format)
-
-    // Alternative AI prompt using JellyFish (JFSH) pseudo-language for Named Entity Recognition (NER).
-    // To use this prompt, set: const DEFAULT_CARD_GENERATION_PROMPT = DEFAULT_CARD_GENERATION_PROMPT_JFSH,
-    // and set DEFAULT_USE_RAWAI_PROMPT_MODE = true, DEFAULT_USE_RAWAI_RESPONSE_MODE = true,
-    // and DEFAULT_SC_CONTAINERIZE = true.
-    const DEFAULT_CARD_GENERATION_PROMPT_JFSH =
+    // AI prompt used to generate new story card in Entity (NER) JellyFish format
+    const DEFAULT_EC_CARD_GENERATION_PROMPT =
 `-----
 <SYSTEM>
 [# AI, stop the story and ignore previous instructions.
@@ -190,6 +130,88 @@ else {
 </SYSTEM>
 %{entry}
 `;
+
+
+    /* =========================================================================
+     * 3. CLASSIC AUTO-CARDS (AC) SETTINGS (Active in "classic" mode)
+     * ========================================================================= */
+    // Use a bulleted list format for newly generated card entries?
+    const DEFAULT_AC_USE_BULLETED_LIST_MODE = true
+
+    // AI prompt used to generate new story card entries in classic mode
+    const DEFAULT_AC_CARD_GENERATION_PROMPT = prose(
+        "-----",
+        "",
+        "<SYSTEM>",
+        "# Stop the story and ignore previous instructions. Write a brief and coherent informational entry for %{title} following these instructions:",
+        "- Write only third-person pure prose information about %{title} using complete sentences with correct punctuation",
+        "- Avoid short-term temporary details or appearances, instead focus on plot-significant information",
+        "- Prioritize story-relevant details about %{title} first to ensure seamless integration with the previous plot",
+        "- Create new information based on the context and story direction",
+        "- Mention %{title} in every sentence",
+        "- Use semicolons if needed",
+        "- Add additional details about %{title} beneath incomplete entries",
+        "- Be concise and grounded",
+        "- Imitate the story's writing style and infer the reader's preferences",
+        "</SYSTEM>",
+        "Continue the entry for %{title} below while avoiding repetition:",
+        "%{entry}"
+    ); // (mimic this multi-line "text" format)
+
+
+    /* =========================================================================
+     * 4. STORY OUTPUT TEXT CLEANUP (Optional for both modes)
+     * ========================================================================= */
+    // Trim incomplete phrases in normal story responses
+    const DEFAULT_TRIM_PHRASE_FRAG_STORY = false
+    // Trim incomplete delimiters in normal story responses
+    const DEFAULT_TRIM_DELIMITER_FRAG_STORY = false
+    // Strip out asterisks in normal story responses
+    const DEFAULT_STRIP_ASTERISKS_STORY = false
+    // Prettify Em Dashes in normal story responses
+    const DEFAULT_PRETTIFY_EMDASHES_STORY = true
+    // Normalize whitespace in normal story responses
+    const DEFAULT_NORMALIZE_WHITESPACE_STORY = false
+
+
+    /* =========================================================================
+     * 5. GENERAL LIMITS & MEMORY SETTINGS
+     * ========================================================================= */
+    // Maximum allowed length for newly generated story card entries?
+    const DEFAULT_GENERATED_ENTRY_LIMIT = 600
+    // (200 to 2000)
+
+    // Do newly generated cards have memory updates enabled by default?
+    const DEFAULT_NEW_CARDS_DO_MEMORY_UPDATES = true
+    // (true or false)
+
+    // Default character limit before the card's memory bank is summarized?
+    const DEFAULT_NEW_CARDS_MEMORY_LIMIT = 3200
+    // (1750 to 9900)
+
+    // Approximately how much shorter should recently compressed memories be? (ratio = 10 * old / new)
+    const DEFAULT_MEMORY_COMPRESSION_RATIO = 25
+    // (20 to 1250)
+
+    // Ignore all-caps during title candidate detection?
+    const DEFAULT_IGNORE_ALL_CAPS_TITLES = true
+    // (true or false)
+
+    // Should player input actions (Do/Say/Story) be considered during title detection?
+    const DEFAULT_DETECT_TITLES_FROM_INPUTS = false
+    // (true or false)
+
+    // How many (minimum) actions in the past does Auto-Cards look for named entities?
+    const DEFAULT_MINIMUM_LOOK_BACK_DISTANCE = 5
+    // (2 to 88)
+
+    // Is Live Script Interface v2 enabled?
+    const DEFAULT_DO_LSI_V2 = false
+    // (true or false)
+
+    // Should the "Debug Data" story card be visible?
+    const DEFAULT_SHOW_DEBUG_DATA = false
+    // (true or false)
 
     // AI prompt used to summarize a given story card's memory bank?
     const DEFAULT_CARD_MEMORY_COMPRESSION_PROMPT = prose(
@@ -633,7 +655,7 @@ else {
                 "defaultEntryLimit", "defaultCardsDoMemoryUpdates", "defaultMemoryLimit", "memoryCompressionRatio", "ignoreAllCapsTitles", "readFromInputs", 
                 "minimumLookBackDistance", "LSIv2", 
                 "trimPhraseFragCards", "trimDelimiterFragCards", "stripAsterisksCards", "prettifyEmDashesCards",
-                "trimPhraseFragStory", "trimDelimiterFragStory", "stripAsterisksStory", "prettifyEmDashesStory", "normalizeWhitespaceStory",
+                "operatingMode", "ECContextHeader", "autoTypeCards", "trimPhraseFragStory", "trimDelimiterFragStory", "stripAsterisksStory", "prettifyEmDashesStory", "normalizeWhitespaceStory",
                 "SCContainerize", "SCContainerOpen", "SCContainerClose", "SCContainerAIBeginSentinel", "SCContainerAIEndSentinel",
                 "showDebugData", "showDebugDataSCRawAIEntry", "showDebugDataSCRawAIMemory", "generationPrompt", "compressionPrompt", "defaultCardType"
             ],
@@ -1339,6 +1361,9 @@ else {
         case "context": {
             // AutoCards was called within the context modifier
             advanceChronometer();
+            if ((AC.config.operatingMode === "entity") && (AC.config.ECContextHeader)) {
+                TEXT = TEXT.replace(/^World Lore:$/m, AC.config.ECContextHeader);
+            }
             break; }
         case "output": {
             // AutoCards was called within the output modifier
@@ -1946,8 +1971,8 @@ else {
             // AutoCards was called within the input modifier
             if ((AC.config.deleteAllAutoCards === false) && /CONFIRM\s*DELETE/i.test(TEXT)) {
                 CODOMAIN.initialize("CONFIRM DELETE -> Success!");
-            } else if (/\/\s*A\s*C/i.test(text)) {
-                CODOMAIN.initialize(doPlayerCommands(text));
+            } else if (/\/\s*(?:A|E)\s*C/i.test((/\/\s*(?:A|E)\s*C/i.test(TEXT)) ? TEXT : text)) {
+                CODOMAIN.initialize(doPlayerCommands((/\/\s*(?:A|E)\s*C/i.test(TEXT)) ? TEXT : text));
             } else if (TEXT.startsWith(" ") && readPastAction(0).text.endsWith("\n")) {
                 // Just a simple little formatting bugfix for regular AID story actions
                 CODOMAIN.initialize(getPrecedingNewlines() + TEXT.replace(/^\s+/, ""));
@@ -2108,6 +2133,33 @@ else {
                         );
                         break; }
                     }
+                }
+                if (parseConfig("operatingmode", "string", "operatingMode")) {
+                    const isNowEntity = !cfg.toLowerCase().includes("classic");
+                    AC.config.operatingMode = isNowEntity ? "entity" : "classic";
+                    if (isNowEntity) {
+                        AC.config.SCContainerize = true;
+                        AC.config.rawAIPromptMode = true;
+                        AC.config.rawAIResponseMode = true;
+                        AC.config.autoTypeCards = true;
+                        AC.config.bulletedListMode = false;
+                        AC.config.generationPrompt = DEFAULT_EC_CARD_GENERATION_PROMPT;
+                        notify("Operating Mode set to: Entity Cards");
+                    } else {
+                        AC.config.SCContainerize = false;
+                        AC.config.rawAIPromptMode = false;
+                        AC.config.rawAIResponseMode = false;
+                        AC.config.autoTypeCards = false;
+                        AC.config.bulletedListMode = true;
+                        AC.config.generationPrompt = DEFAULT_AC_CARD_GENERATION_PROMPT;
+                        notify("Operating Mode set to: Classic Auto-Cards");
+                    }
+                }
+                if (parseConfig("entitycardscontextheader", "string", "ECContextHeader")) {
+                    notify("Entity Cards context header has been set to: \"" + cfg + "\"");
+                }
+                if (parseConfig("autotypestorycards", "boolean", "autoTypeCards")) {
+                    notify("Auto-typing story cards has been set to: \"" + cfg + "\"");
                 }
                 if (parseConfig("newcardsuseabulletedlistformat", "boolean", "bulletedListMode")) {
                     if (cfg) {
@@ -2365,7 +2417,7 @@ else {
                             || (!AC.config.readFromInputs && isDoSayStory(action.type))
                             || /^[^\p{Lu}]*$/u.test(action.text)
                             || action.text.includes("<<<")
-                            || /\/\s*A\s*C/i.test(action.text)
+                            || /\/\s*(?:A|E)\s*C/i.test(action.text)
                             || /CONFIRM\s*DELETE/i.test(action.text)
                         ) {
                             // Skip see actions
@@ -3042,6 +3094,9 @@ else {
                 // Or the (mutually exclusive) card memory compression delimiter
                 context = context.replaceAll("%@COM@%", "");
             }
+            if ((AC.config.operatingMode === "entity") && (AC.config.ECContextHeader)) {
+                context = context.replace(/^World Lore:$/m, AC.config.ECContextHeader);
+            }
             CODOMAIN.initialize(context);
             function isolateMemories(memoriesText) {
                 return (memoriesText
@@ -3287,10 +3342,10 @@ else {
                             )
                         ;
 
-                        // Define the regular expression
+                        // Define the regular expression for entity type detection
                         const entityTypeRegex = /^- Type: ([^,]+),/m;
                         const entityTypeMatch = AC.generation.workpiece.entry.match(entityTypeRegex);
-                        const entityType = entityTypeMatch ? entityTypeMatch[1] : AC.config.defaultCardType;
+                        const entityType = (AC.config.autoTypeCards && entityTypeMatch) ? entityTypeMatch[1].trim() : AC.config.defaultCardType;
                         // If the end sentinel was seen above, we're done.
                         if (sawEndSentinel) {
                             // The AI signaled the end of the entry.
@@ -3709,8 +3764,10 @@ else {
         }
         function getConfigureCardEntry() {
             return prose(
-                "> Auto-Cards automatically creates and updates plot-relevant story cards while you play. You may configure the following settings by replacing \"false\" with \"true\" (and vice versa) or by adjusting numbers for the appropriate settings.",
+                "> Auto-Cards / Entity Cards automatically creates and updates plot-relevant story cards while you play. You may configure the following settings by replacing \"false\" with \"true\" (and vice versa) or by adjusting numbers/strings for the appropriate settings.",
                 "> Disable Auto-Cards: false",
+                "> Operating Mode: " + (AC.config.operatingMode === "entity" ? "Entity Cards" : "Classic Auto-Cards"),
+                "> Entity Cards context header: " + stringifyObject(AC.config.ECContextHeader),
                 "> Show detailed guide: false",
                 "> Delete all automatic story cards: false",
                 "> Reset all config settings and prompts: false",
@@ -3719,6 +3776,7 @@ else {
                 "> New cards use a bulleted list format: " + AC.config.bulletedListMode,
                 "> Raw AI Prompt Mode: " + AC.config.rawAIPromptMode,
                 "> Raw AI Response Mode: " + AC.config.rawAIResponseMode,
+                "> Auto-type story cards: " + AC.config.autoTypeCards,
                 "> Maximum entry length for new cards: " + AC.config.defaultEntryLimit,
                 "> New cards perform memory updates: " + AC.config.defaultCardsDoMemoryUpdates,
                 "> Card memory bank preferred length: " + AC.config.defaultMemoryLimit,
@@ -3766,8 +3824,9 @@ else {
         // Auto-Cards is currently disabled
         switch(HOOK) {
         case "input": {
-            if (/\/\s*A\s*C/i.test(text)) {
-                CODOMAIN.initialize(doPlayerCommands(text));
+            const cmdText = (/\/\s*(?:A|E)\s*C/i.test(TEXT)) ? TEXT : text;
+            if (/\/\s*(?:A|E)\s*C/i.test(cmdText)) {
+                CODOMAIN.initialize(doPlayerCommands(cmdText));
             } else {
                 CODOMAIN.initialize(TEXT);
             }
@@ -3792,7 +3851,11 @@ else {
                 }
             }
             AC.signal.forceToggle = null;
-            CODOMAIN.initialize(TEXT);
+            let context = TEXT;
+            if ((AC.config.operatingMode === "entity") && (AC.config.ECContextHeader)) {
+                context = context.replace(/^World Lore:$/m, AC.config.ECContextHeader);
+            }
+            CODOMAIN.initialize(context);
             function enableAutoCards() {
                 // Auto-Cards has been enabled
                 AC.config.doAC = true;
@@ -5184,21 +5247,36 @@ else {
                 return fallback;
             }
         }
+        const mode = (typeof DEFAULT_OPERATING_MODE === "string" && DEFAULT_OPERATING_MODE.toLowerCase().includes("classic")) ? "classic" : "entity";
+        const isEntity = (mode === "entity");
+
         return O.s({
-            // Is Auto-Cards enabled?
+            // Is Auto-Cards / Entity Cards enabled?
             doAC: check(DEFAULT_DO_AC),
+            // Operating mode: "entity" (Entity Cards) or "classic" (Classic Auto-Cards)
+            operatingMode: mode,
+            // Header to replace "World Lore:" in context
+            ECContextHeader: check(DEFAULT_EC_CONTEXT_HEADER, "Named Entities (NER):", "string"),
             // Delete all previously generated story cards?
             deleteAllAutoCards: null,
             // Pin the configuration interface story card near the top?
             pinConfigureCard: check(DEFAULT_PIN_CONFIGURE_CARD),
             // Minimum number of turns in between automatic card generation events?
             addCardCooldown: validateCooldown(DEFAULT_CARD_CREATION_COOLDOWN),
-            // Use bulleted list mode for newly generated card entries?
-            bulletedListMode: check(DEFAULT_USE_BULLETED_LIST_MODE),
-            // Use raw AI prompt mode?
-            rawAIPromptMode: check(DEFAULT_USE_RAWAI_PROMPT_MODE),
-            // Use raw AI prompt mode?
-            rawAIResponseMode: check(DEFAULT_USE_RAWAI_RESPONSE_MODE),
+
+            // Mode-specific defaults
+            bulletedListMode: check(isEntity ? false : DEFAULT_AC_USE_BULLETED_LIST_MODE),
+            rawAIPromptMode: check(isEntity ? DEFAULT_EC_RAWAI_PROMPT_MODE : false),
+            rawAIResponseMode: check(isEntity ? DEFAULT_EC_RAWAI_RESPONSE_MODE : false),
+            autoTypeCards: check(isEntity ? DEFAULT_EC_AUTO_TYPE_CARDS : false),
+            SCContainerize: check(isEntity ? DEFAULT_EC_SC_CONTAINERIZE : false),
+
+            // Container settings
+            SCContainerOpen: check(DEFAULT_EC_SC_CONTAINER_OPEN, "{ Entity: ", "string"),
+            SCContainerClose: check(DEFAULT_EC_SC_CONTAINER_CLOSE, "\n}", "string"),
+            SCContainerAIBeginSentinel: check(DEFAULT_EC_SC_AI_BEGIN_SENTINEL, "ENTITY_BEGIN", "string"),
+            SCContainerAIEndSentinel: check(DEFAULT_EC_SC_AI_END_SENTINEL, "ENTITY_END", "string"),
+
             // Maximum allowed length for newly generated story card entries?
             defaultEntryLimit: validateEntryLimit(DEFAULT_GENERATED_ENTRY_LIMIT),
             // Do newly generated cards have memory updates enabled by default?
@@ -5214,95 +5292,38 @@ else {
             // How many (minimum) actions in the past does Auto-Cards look for named entities?
             minimumLookBackDistance: validateMinLookBackDist(DEFAULT_MINIMUM_LOOK_BACK_DISTANCE),
             // Is Live Script Interface v2 enabled?
-            LSIv2: (function() {
-                if (DEFAULT_DO_LSI_V2 === true) {
-                    return true;
-                } else {
-                    // Intrepret "false" as null, both here and for later config card reads
-                    return null;
-                }
-            })(),
+            LSIv2: (DEFAULT_DO_LSI_V2 === true) ? true : null,
 
+            // Card cleanup
+            trimPhraseFragCards: check(DEFAULT_EC_TRIM_PHRASE_FRAG_CARDS, true),
+            trimDelimiterFragCards: check(DEFAULT_EC_TRIM_DELIMITER_FRAG_CARDS, true),
+            stripAsterisksCards: check(DEFAULT_EC_STRIP_ASTERISKS_CARDS, true),
+            prettifyEmDashesCards: check(DEFAULT_EC_PRETTIFY_EMDASHES_CARDS, true),
 
-            // Should incomplete sentences be trimmed from card responses?
-            trimPhraseFragCards: check(DEFAULT_TRIM_PHRASE_FRAG_CARDS, true),
-            // Should unbalanced quote/delimited text be trimmed from card responses?
-            trimDelimiterFragCards: check(DEFAULT_TRIM_DELIMITER_FRAG_CARDS, true),
-            // Should asterisks be stripped from AI card responses?
-            stripAsterisksCards: check(DEFAULT_STRIP_ASTERISKS_CARDS, true),
-            // Should em dashes be prettifies in AI card responses?
-            prettifyEmDashesCards: check(DEFAULT_PRETTIFY_EMDASHES_CARDS, true),
-
-            // Should incomplete sentences be trimmed from story responses?
+            // Story cleanup
             trimPhraseFragStory: check(DEFAULT_TRIM_PHRASE_FRAG_STORY, false),
-            // Should unbalanced quote/delimited text be trimmed from story responses?
             trimDelimiterFragStory: check(DEFAULT_TRIM_DELIMITER_FRAG_STORY, false),
-            // Should asterisks be stripped from story responses?
             stripAsterisksStory: check(DEFAULT_STRIP_ASTERISKS_STORY, false),
-            // Should em dashes be prettified in story responses?
             prettifyEmDashesStory: check(DEFAULT_PRETTIFY_EMDASHES_STORY, true),
-            // Should whitespace be normalized in story responses?
             normalizeWhitespaceStory: check(DEFAULT_NORMALIZE_WHITESPACE_STORY, false),
 
-
-            // Should story cards be containerized?
-            SCContainerize: check(DEFAULT_SC_CONTAINERIZE, false),
-            // Provide the opening and closing delimiters for story cards.
-            SCContainerOpen: check(DEFAULT_SC_CONTAINER_OPEN, "", "string"),
-            SCContainerClose: check(DEFAULT_SC_CONTAINER_CLOSE, "", "string"),
-            // A Begin Sentinel the AI may use to mark beginning of output.
-            SCContainerAIBeginSentinel: check(DEFAULT_SC_AI_BEGIN_SENTINEL, "", "string"),
-            // An End Sentinel the AI may use to mark ending of output.
-            SCContainerAIEndSentinel: check(DEFAULT_SC_AI_END_SENTINEL, "", "string"),
-            
-            // Should the debug data card be visible?
+            // Debug settings
             showDebugData: check(DEFAULT_SHOW_DEBUG_DATA, false),
-            // Debug the raw AI story card output.
-            showDebugDataSCRawAIEntry: check(DEFAULT_SHOW_DEBUG_SC_RAWAI_ENTRY, false),
-            // Debug the raw AI memory output.
-            showDebugDataSCRawAIMemory: check(DEFAULT_SHOW_DEBUG_SC_RAWAI_MEMORY, false),
-            // How should the AI be prompted when generating new story card entries?
-            generationPrompt: check(DEFAULT_CARD_GENERATION_PROMPT, prose(
-                "-----",
-                "",
-                "<SYSTEM>",
-                "# Stop the story and ignore previous instructions. Write a brief and coherent informational entry for %{title} following these instructions:",
-                "- Write only third-person pure prose information about %{title} using complete sentences with correct punctuation",
-                "- Avoid short-term temporary details or appearances, instead focus on plot-significant information",
-                "- Prioritize story-relevant details about %{title} first to ensure seamless integration with the previous plot",
-                "- Create new information based on the context and story direction",
-                "- Mention %{title} in every sentence",
-                "- Use semicolons if needed",
-                "- Add additional details about %{title} beneath incomplete entries",
-                "- Be concise and grounded",
-                "- Imitate the story's writing style and infer the reader's preferences",
-                "</SYSTEM>",
-                "Continue the entry for %{title} below while avoiding repetition:",
-                "%{entry}"
-            ), "string"),
-            // How should the AI be prompted when summarizing memories for a given story card?
-            compressionPrompt: check(DEFAULT_CARD_MEMORY_COMPRESSION_PROMPT, prose(
-                "-----",
-                "",
-                "<SYSTEM>",
-                "# Stop the story and ignore previous instructions. Summarize and condense the given paragraph into a narrow and focused memory passage while following these guidelines:",
-                "- Ensure the passage retains the core meaning and most essential details",
-                "- Use the third-person perspective",
-                "- Prioritize information-density, accuracy, and completeness",
-                "- Remain brief and concise",
-                "- Write firmly in the past tense",
-                "- The paragraph below pertains to old events from far earlier in the story",
-                "- Integrate %{title} naturally within the memory; however, only write about the events as they occurred",
-                "- Only reference information present inside the paragraph itself, be specific",
-                "</SYSTEM>",
-                "Write a summarized old memory passage for %{title} based only on the following paragraph:",
-                "\"\"\"",
-                "%{memory}",
-                "\"\"\"",
-                "Summarize below:"
-            ), "string"),
-            // All cards constructed by AC will inherit this type by default
-            defaultCardType: check(DEFAULT_CARD_TYPE, "class", "string")
+            showDebugDataSCRawAIEntry: check(DEFAULT_EC_SHOW_DEBUG_RAWAI_ENTRY, false),
+            showDebugDataSCRawAIMemory: check(DEFAULT_EC_SHOW_DEBUG_RAWAI_MEMORY, false),
+
+            // AI Prompts
+            generationPrompt: check(
+                isEntity ? DEFAULT_EC_CARD_GENERATION_PROMPT : DEFAULT_AC_CARD_GENERATION_PROMPT,
+                isEntity ? DEFAULT_EC_CARD_GENERATION_PROMPT : DEFAULT_AC_CARD_GENERATION_PROMPT,
+                "string"
+            ),
+            compressionPrompt: check(
+                DEFAULT_CARD_MEMORY_COMPRESSION_PROMPT,
+                DEFAULT_CARD_MEMORY_COMPRESSION_PROMPT,
+                "string"
+            ),
+            defaultCardType: "auto-card"
         });
     }
     function getDefaultConfigBans() {
@@ -5557,9 +5578,9 @@ else {
                 } else {
                     return input.trimEnd();
                 }
-            })().split(/(?=\/\s*A\s*C)/i)
+            })().split(/(?=\/\s*(?:A|E)\s*C)/i)
         )) {
-            const prefixPattern = /^\/\s*A\s*C/i;
+            const prefixPattern = /^\/\s*(?:A|E)\s*C/i;
             if (!prefixPattern.test(command)) {
                 continue;
             }
@@ -5574,8 +5595,41 @@ else {
             if (!requestTitle) {
                 // Request with no args
                 AC.generation.cooldown = 0;
-                result += "/AC -> Success!\n\n";
-                logEvent("/AC");
+                result += "/EC -> Card generation triggered!\n\n";
+                logEvent("/EC");
+            } else if (/^mode\s+(entity|classic)/i.test(requestTitle)) {
+                const requestedMode = requestTitle.match(/^mode\s+(entity|classic)/i)[1].toLowerCase();
+                AC.config.operatingMode = requestedMode;
+                const isNowEntity = (requestedMode === "entity");
+                AC.config.SCContainerize = isNowEntity;
+                AC.config.rawAIPromptMode = isNowEntity;
+                AC.config.rawAIResponseMode = isNowEntity;
+                AC.config.autoTypeCards = isNowEntity;
+                AC.config.bulletedListMode = !isNowEntity;
+                AC.config.generationPrompt = isNowEntity ? DEFAULT_EC_CARD_GENERATION_PROMPT : DEFAULT_AC_CARD_GENERATION_PROMPT;
+                const cfgTitle = getControlVariants().configure.title;
+                const cfgCard = Internal.getCard(card => card.title === cfgTitle);
+                if (cfgCard) {
+                    cfgCard.entry = cfgCard.entry.replace(
+                        /Operating Mode:\s*[^\n]+/i,
+                        "Operating Mode: " + (isNowEntity ? "Entity Cards" : "Classic Auto-Cards")
+                    );
+                }
+                result += "/EC mode -> Switched to " + (isNowEntity ? "Entity Cards" : "Classic Auto-Cards") + "\n\n";
+                logEvent("/EC mode: " + requestedMode);
+            } else if (/^header\s+/i.test(requestTitle)) {
+                const newHeader = requestTitle.replace(/^header\s+/i, "").trim();
+                AC.config.ECContextHeader = newHeader;
+                const cfgTitle = getControlVariants().configure.title;
+                const cfgCard = Internal.getCard(card => card.title === cfgTitle);
+                if (cfgCard) {
+                    cfgCard.entry = cfgCard.entry.replace(
+                        /Entity Cards context header:\s*[^\n]+/i,
+                        "Entity Cards context header: " + JSON.stringify(newHeader)
+                    );
+                }
+                result += "/EC header -> Set to: \"" + newHeader + "\"\n\n";
+                logEvent("/EC header: " + newHeader);
             } else {
                 const request = {title: requestTitle.replace(/\s*[\.\?!:]+$/, "")};
                 const redo = (function() {
@@ -6033,31 +6087,31 @@ else {
     // Used to parse the "Configure Auto-Cards" and "Edit to enable Auto-Cards" control card entries
     function extractSettings(settingsText) {
         const settings = {};
-        // Lowercase everything
-        // Remove all non-alphanumeric characters (aside from ":" and ">")
-        // Split into an array of strings delimited by the ">" character
-        const settingLines = settingsText.toLowerCase().replace(/[^a-z0-9:>]+/g, "").split(">");
-        for (const settingLine of settingLines) {
-            // Each setting line is preceded by ">" and bisected by ":"
-            const settingKeyValue = settingLine.split(":");
-            if ((settingKeyValue.length !== 2) || settings.hasOwnProperty(settingKeyValue[0])) {
-                // The bisection failed or this setting line's key already exists
+        const rawLines = settingsText.replace(/>/g, "\n").split("\n");
+        for (const rawLine of rawLines) {
+            const trimmed = rawLine.trim();
+            if (!trimmed || !trimmed.includes(":")) {
                 continue;
             }
-            // Parse boolean and integer setting values
-            if (Words.falses.includes(settingKeyValue[1])) {
-                // This setting line's value is false
-                settings[settingKeyValue[0]] = false;
-            } else if (Words.trues.includes(settingKeyValue[1])) {
-                // This setting line's value is true
-                settings[settingKeyValue[0]] = true;
-            } else if (/^\d+$/.test(settingKeyValue[1])) {
-                // This setting line's value is an integer
-                // Negative integers are parsed as being positive (because "-" characters were removed)
-                settings[settingKeyValue[0]] = parseInt(settingKeyValue[1], 10);
+            const colonIdx = trimmed.indexOf(":");
+            const rawKey = trimmed.slice(0, colonIdx).toLowerCase().replace(/[^a-z0-9]/g, "");
+            const rawVal = trimmed.slice(colonIdx + 1).trim();
+            if (!rawKey || settings.hasOwnProperty(rawKey)) {
+                continue;
+            }
+            const cleanVal = rawVal.replace(/^["']|["']$/g, "").trim();
+            const lowerClean = cleanVal.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+            if (Words.falses.includes(lowerClean)) {
+                settings[rawKey] = false;
+            } else if (Words.trues.includes(lowerClean)) {
+                settings[rawKey] = true;
+            } else if (/^\d+$/.test(lowerClean)) {
+                settings[rawKey] = parseInt(lowerClean, 10);
+            } else {
+                settings[rawKey] = cleanVal;
             }
         }
-        // Return the settings object for later analysis
         return settings;
     }
     // Ensure the given singleton card is pinned near the top of the player's list of story cards
@@ -6596,6 +6650,6 @@ else {
     } else {
         return codomain;
     }
-} AutoCards(null); function isolateLSIv2(code, log, text, stop) { const console = Object.freeze({log}); try { eval(code); return [null, text, stop]; } catch (error) { return [error, text, stop]; } }
+} AutoCards(null); const EntityCards = AutoCards; try { globalThis.EntityCards = AutoCards; } catch (_) {} function isolateLSIv2(code, log, text, stop) { const console = Object.freeze({log}); try { eval(code); return [null, text, stop]; } catch (error) { return [error, text, stop]; } }
 
 // Your other library scripts go here
