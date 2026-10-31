@@ -3367,18 +3367,19 @@ else {
                         let sawEndSentinel = false;
                         if (AC.config.SCContainerAIEndSentinel !== "") {
                             const endSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIEndSentinel);
-                            const endSentinelRx = new RegExp(`\\n[^\n]*${endSentinelEscaped}.*$`, 's');
+                            const endSentinelRx = new RegExp(`(?:\\n[^\\n]*|\\s*)${endSentinelEscaped}[\\s\\S]*$`, 'i');
                             // If defined, replace the end sentinel and any leading ws and bullet followed by any character to the end of input.
                             sawEndSentinel = endSentinelRx.test(AC.generation.workpiece.entry);
-                            AC.generation.workpiece.entry = AC.generation.workpiece.entry.replace(endSentinelRx, "");
-
-                            // If the end sentinel has been seen, then remove the begin sentinel.
-                            if (sawEndSentinel && AC.config.SCContainerAIBeginSentinel !== "") {
-                                const beginSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIBeginSentinel);
-                                const beginSentinelRx = new RegExp(`.*${beginSentinelEscaped}\\s*`, 's');
-                                AC.generation.workpiece.entry = AC.generation.workpiece.entry.replace(beginSentinelRx, "\n");
+                            if (sawEndSentinel) {
+                                AC.generation.workpiece.entry = AC.generation.workpiece.entry.replace(endSentinelRx, "");
                             }
+                        }
 
+                        // Remove begin sentinel and any preceding preamble immediately whenever it appears
+                        if (AC.config.SCContainerAIBeginSentinel !== "") {
+                            const beginSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIBeginSentinel);
+                            const beginSentinelRx = new RegExp(`^[\\s\\S]*?${beginSentinelEscaped}\\s*`, 'i');
+                            AC.generation.workpiece.entry = AC.generation.workpiece.entry.replace(beginSentinelRx, "");
                         }
 
                         // We do some cleanup between generations to keep the AI from developing bad patterns.
@@ -3563,8 +3564,20 @@ else {
                         keys: AC.generation.workpiece.keys,
                         entry: Internal.SCContainerWrap((function() {
                             if (AC.config.SCContainerize) {
-                                const titleHeader = "{title: " + AC.generation.workpiece.title + "} ";
-                                return titleHeader + AC.generation.workpiece.entry;
+                                let cleanEntry = AC.generation.workpiece.entry.trim();
+                                if (AC.config.SCContainerAIBeginSentinel !== "") {
+                                    const beginSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIBeginSentinel);
+                                    const beginSentinelRx = new RegExp(`^[\\s\\S]*?${beginSentinelEscaped}\\s*`, 'i');
+                                    cleanEntry = cleanEntry.replace(beginSentinelRx, "");
+                                }
+                                if (AC.config.SCContainerAIEndSentinel !== "") {
+                                    const endSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIEndSentinel);
+                                    const endSentinelRx = new RegExp(`(?:\\n[^\\n]*|\\s*)${endSentinelEscaped}[\\s\\S]*$`, 'i');
+                                    cleanEntry = cleanEntry.replace(endSentinelRx, "");
+                                }
+                                cleanEntry = cleanEntry.trim();
+                                const titleHeader = "{title: " + AC.generation.workpiece.title + "}";
+                                return titleHeader + "\n" + cleanEntry;
                             }
                             if (!AC.config.bulletedListMode) {
                                 return AC.generation.workpiece.entry;
