@@ -78,6 +78,10 @@ Once enabled in your adventure, a pinned story card titled **"Configure Auto-Car
 
 *(Note: Settings parsing is fully flexible and case/prefix-tolerant, so editing options with or without the `*EC` label will work identically.)*
 
+> [!TIP]
+> **AI Dungeon Response Length:**  
+> Setting your in-game **Response Length** slider to **250+ tokens** in AI Dungeon's gameplay settings allows complete Entity Cards to generate in a single turn. With shorter response length settings (e.g. 50–100 tokens), the script will automatically pause and prompt you with `>>> please select "continue" <<<` to construct the entity template across multiple turns.
+
 ---
 
 ## Scenario Script Installation Guide

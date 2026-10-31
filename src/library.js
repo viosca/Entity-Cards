@@ -46,6 +46,9 @@ function AutoCards(inHook, inText, inStop) {
     /* =========================================================================
      * 2. ENTITY CARDS (*EC) UNIQUE SETTINGS (Active in "entity" mode)
      * ========================================================================= */
+    // [*EC] Maximum allowed length for newly generated entity cards in EC mode (200 to 2000)
+    const DEFAULT_EC_GENERATED_ENTRY_LIMIT = 1000
+
     // [*EC] Replacement string for "World Lore:" header in context (set to "" to leave unchanged)
     const DEFAULT_EC_CONTEXT_HEADER = "Named Entities (NER):"
 
@@ -2134,7 +2137,8 @@ else {
                         break; }
                     }
                 }
-                if (parseConfig("operatingmode", "string", "operatingMode")) {
+                const modeChanged = parseConfig("operatingmode", "string", "operatingMode");
+                if (modeChanged) {
                     const isNowEntity = !cfg.toLowerCase().includes("classic");
                     AC.config.operatingMode = isNowEntity ? "entity" : "classic";
                     if (isNowEntity) {
@@ -2144,6 +2148,7 @@ else {
                         AC.config.autoTypeCards = true;
                         AC.config.bulletedListMode = false;
                         AC.config.generationPrompt = DEFAULT_EC_CARD_GENERATION_PROMPT;
+                        AC.config.defaultEntryLimit = validateEntryLimit(DEFAULT_EC_GENERATED_ENTRY_LIMIT);
                         notify("Operating Mode set to: Entity Cards");
                     } else {
                         AC.config.SCContainerize = false;
@@ -2152,6 +2157,7 @@ else {
                         AC.config.autoTypeCards = false;
                         AC.config.bulletedListMode = true;
                         AC.config.generationPrompt = DEFAULT_AC_CARD_GENERATION_PROMPT;
+                        AC.config.defaultEntryLimit = validateEntryLimit(DEFAULT_GENERATED_ENTRY_LIMIT);
                         notify("Operating Mode set to: Classic Auto-Cards");
                     }
                 }
@@ -2183,10 +2189,12 @@ else {
                     }
                 }
                 if (parseConfig("maximumentrylengthfornewcards", "number", "defaultEntryLimit")) {
-                    AC.config.defaultEntryLimit = validateEntryLimit(cfg);
-                    notify(
-                        "New card entries will be limited to " + AC.config.defaultEntryLimit + " characters of generated text"
-                    );
+                    if (!modeChanged || (notEmptyObj(oldConfig) && (oldConfig.defaultEntryLimit !== cfg))) {
+                        AC.config.defaultEntryLimit = validateEntryLimit(cfg);
+                        notify(
+                            "New card entries will be limited to " + AC.config.defaultEntryLimit + " characters of generated text"
+                        );
+                    }
                 }
                 if (parseConfig("newcardsperformmemoryupdates", "boolean", "defaultCardsDoMemoryUpdates")) {
                     if (cfg) {
@@ -3409,10 +3417,15 @@ else {
                         const entityTypeRegex = /^- Type: ([^,]+),/m;
                         const entityTypeMatch = AC.generation.workpiece.entry.match(entityTypeRegex);
                         const entityType = (AC.config.autoTypeCards && entityTypeMatch) ? entityTypeMatch[1].trim() : AC.config.defaultCardType;
-                        // If the end sentinel was seen above, we're done.
-                        if (sawEndSentinel) {
+                        
+                        // Check if the entity has finished: either via end sentinel or completed Description field
+                        // Both Person and non-Person templates terminate with "- Description: <text>."
+                        const hasFinishedDescription = /(?:^|\n)-\s*Description:\s*[\s\S]+?[\.!\?]["']?\s*$/i.test(AC.generation.workpiece.entry.trim());
+
+                        // If the end sentinel was seen or the final Description field is complete, we're done.
+                        if (sawEndSentinel || hasFinishedDescription) {
                             // The AI signaled the end of the entry.
-                            //logEvent("outputModifier: Saw the end sentinel, skipping end."); //
+                            //logEvent("outputModifier: Saw the end sentinel or completed description, skipping end.");
                             // The final cleanup happens in the card generation.
                             AC.generation.workpiece.type = entityType;
                             return 0; // Causes a skip to end.
@@ -5353,7 +5366,7 @@ else {
             SCContainerAIEndSentinel: check(DEFAULT_EC_SC_AI_END_SENTINEL, "ENTITY_END", "string"),
 
             // Maximum allowed length for newly generated story card entries?
-            defaultEntryLimit: validateEntryLimit(DEFAULT_GENERATED_ENTRY_LIMIT),
+            defaultEntryLimit: validateEntryLimit(isEntity ? DEFAULT_EC_GENERATED_ENTRY_LIMIT : DEFAULT_GENERATED_ENTRY_LIMIT),
             // Do newly generated cards have memory updates enabled by default?
             defaultCardsDoMemoryUpdates: check(DEFAULT_NEW_CARDS_DO_MEMORY_UPDATES),
             // Default character limit before the card's memory bank is summarized?
@@ -5682,12 +5695,17 @@ else {
                 AC.config.autoTypeCards = isNowEntity;
                 AC.config.bulletedListMode = !isNowEntity;
                 AC.config.generationPrompt = isNowEntity ? DEFAULT_EC_CARD_GENERATION_PROMPT : DEFAULT_AC_CARD_GENERATION_PROMPT;
+                AC.config.defaultEntryLimit = validateEntryLimit(isNowEntity ? DEFAULT_EC_GENERATED_ENTRY_LIMIT : DEFAULT_GENERATED_ENTRY_LIMIT);
                 const cfgTitle = getControlVariants().configure.title;
                 const cfgCard = Internal.getCard(card => card.title === cfgTitle);
                 if (cfgCard) {
                     cfgCard.entry = cfgCard.entry.replace(
                         /(?:\*EC\s+)?Operating Mode:\s*[^\n]+/i,
                         "*EC Operating Mode: " + (isNowEntity ? "Entity Cards" : "Classic Auto-Cards")
+                    );
+                    cfgCard.entry = cfgCard.entry.replace(
+                        /Maximum entry length for new cards:\s*\d+/i,
+                        "Maximum entry length for new cards: " + AC.config.defaultEntryLimit
                     );
                 }
                 result += "/EC mode -> Switched to " + (isNowEntity ? "Entity Cards" : "Classic Auto-Cards") + "\n\n";
@@ -6174,7 +6192,16 @@ else {
             if (!rawKey || settings.hasOwnProperty(rawKey)) {
                 continue;
             }
-            const cleanVal = rawVal.replace(/^["']|["']$/g, "").trim();
+            const cleanVal = (function() {
+                if ((rawVal.startsWith('"') && rawVal.endsWith('"')) || (rawVal.startsWith("'") && rawVal.endsWith("'"))) {
+                    try {
+                        return JSON.parse(rawVal);
+                    } catch (_) {
+                        return rawVal.slice(1, -1);
+                    }
+                }
+                return rawVal.trim();
+            })();
             const lowerClean = cleanVal.toLowerCase().replace(/[^a-z0-9]/g, "");
 
             if (Words.falses.includes(lowerClean)) {
