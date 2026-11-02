@@ -42,6 +42,14 @@ function AutoCards(inHook, inText, inStop) {
     const DEFAULT_PIN_CONFIGURE_CARD = true
     // (true or false)
 
+    // Allow manual player commands (/ec or /ac) to bypass common entity & banned title filters?
+    const DEFAULT_MANUAL_BYPASS_TITLE_FILTERS = true
+    // (true or false)
+
+    // Filter common entities (real-world cities, countries, planets) from background auto-detection?
+    const DEFAULT_FILTER_COMMON_ENTITIES = true
+    // (true or false)
+
 
     /* =========================================================================
      * 2. ENTITY CARDS (*EC) UNIQUE SETTINGS (Active in "entity" mode)
@@ -807,7 +815,7 @@ description: {1 concise sentence narrative summary}
     // AutoCards returns a pseudoimmutable codomain which is initialized only once before being read and returned
     const CODOMAIN = new Const().declare();
     // Transient sets for high-performance lookup
-    const [used, bans, auto, forenames, surnames] = Array.from({length: 5}, () => new Set());
+    const [used, bans, auto, forenames, surnames, systemBans] = Array.from({length: 6}, () => new Set());
     const memoized = new Map();
     // Holds a reference to the data card singleton, remains unassigned unless required
     let data = null;
@@ -845,7 +853,7 @@ description: {1 concise sentence narrative summary}
                 "operatingMode", "ECContextHeader", "autoTypeCards", "trimPhraseFragStory", "trimDelimiterFragStory", "stripAsterisksStory", "prettifyEmDashesStory", "normalizeWhitespaceStory",
                 "SCContainerize", "SCContainerOpen", "SCContainerClose", "SCContainerAIBeginSentinel", "SCContainerAIEndSentinel",
                 "showDebugData", "showDebugDataSCRawAIEntry", "showDebugDataSCRawAIMemory", "generationPrompt", "compressionPrompt", "defaultCardType",
-                "ECPreset", "ECAutoPreset"
+                "ECPreset", "ECAutoPreset", "manualBypassTitleFilters", "filterCommonEntities"
             ],
             signal: [
                 "emergencyHalt", "forceToggle", "overrideBans", "swapControlCards", "recheckRetryOrErase", "maxChars", "outputReplacement", "upstreamError"
@@ -1249,9 +1257,10 @@ description: {1 concise sentence narrative summary}
                             "Invalid argument: \"" + request + "\" -> AutoCards().API.generateCard() must be called with either 1, 2, or 3 strings OR a correctly formatted card generation object"
                         );
                     }
+                    request.isManual = true;
                     O.f(request);
                     Internal.getUsedTitles(true);
-                    return Internal.generateCard(request);
+                    return Internal.generateCard(request, ["", ""], true);
                 },
                 /*** Regenerates a card by title or object reference, optionally preserving or modifying its input info
                 *
@@ -2407,6 +2416,21 @@ description: {1 concise sentence narrative summary}
                     notify(
                         "Titles and names mentioned in your story may become eligible for future card generation attempts once they are at least " + AC.config.minimumLookBackDistance + " actions old"
                     );
+                }
+                if (parseConfig("manualcommandsbypasstitlefilters", "boolean", "manualBypassTitleFilters")) {
+                    if (cfg) {
+                        notify("Manual /ec and /ac commands may now generate cards for common entities and custom-banned titles");
+                    } else {
+                        notify("Manual commands will enforce strict title filters and rejections");
+                    }
+                }
+                if (parseConfig("filtercommonentitiesfromautodetection", "boolean", "filterCommonEntities")) {
+                    bans.clear();
+                    if (cfg) {
+                        notify("Common entities and real-world places will be filtered from background auto-generation");
+                    } else {
+                        notify("Common entities and real-world places may now be automatically detected during gameplay");
+                    }
                 }
                 cfg = settings.uselivescriptinterfacev2;
                 if (typeof cfg === "boolean") {
@@ -4803,7 +4827,7 @@ description: {1 concise sentence narrative summary}
             return Internal.SCContainerWrap(processedResult);
         }
 
-        static generateCard(request, predefinedPair = ["", ""]) {
+        static generateCard(request, predefinedPair = ["", ""], isManualOverride) {
             // Method call guide:
             // Internal.generateCard({
             //     // All properties except 'title' are optional
@@ -4819,7 +4843,11 @@ description: {1 concise sentence narrative summary}
             //     memoryUpdates: true, // card updates when new relevant memories are formed
             //     memoryLimit: 3200, // max characters before the card memory is compressed
             // });
-            const titleKeyPair = formatTitle((request.title ?? "").toString());
+            const isManual = (isManualOverride !== undefined)
+                ? isManualOverride
+                : (!!request.isManual);
+            const allowBypass = (AC.config.manualBypassTitleFilters !== false);
+            const titleKeyPair = formatTitle((request.title ?? "").toString(), allowBypass && isManual);
             const title = predefinedPair[0] || titleKeyPair.newTitle;
             if (
                 (title === "")
@@ -4976,13 +5004,14 @@ description: {1 concise sentence narrative summary}
             } else if (newInfo !== "") {
                 request.entryPromptDetails = (request.entryPromptDetails ?? "").toString() + "\n" + newInfo;
             }
+            request.isManual = true;
             O.f(request);
             Internal.getUsedTitles(true);
-            if (!Internal.generateCard(request) && !Internal.generateCard(request, [
+            if (!Internal.generateCard(request, ["", ""], true) && !Internal.generateCard(request, [
                 (oldCard.entry.match(/{title: ([\s\S]*?)}/)?.[1] || request.title.replace(/\w\S*/g, word => (
                     word[0].toUpperCase() + word.slice(1).toLowerCase()
                 ))), oldCard.keys
-            ])) {
+            ], true)) {
                 constructCard(oldCard, newCardIndex());
                 Internal.getUsedTitles(true);
                 return false;
@@ -5057,12 +5086,12 @@ description: {1 concise sentence narrative summary}
                 }
                 // An ideal auto-card's entry starts with "{title: Example of Greatness}" (example)
                 // An ideal auto-card's description contains "{updates: true, limit: 3200}" (example)
-                if (checkPlurals(denumberName(card.title.replace("\n", "")), t => isBanned(t))) {
+                if (checkPlurals(denumberName(card.title.replace("\n", "")), t => (isSystemBanned(t) || Internal.getBannedTitles().map(b => b.toLowerCase()).includes(t)))) {
                     checkRemaining();
                     continue;
                 } else if (!card.keys.includes(",")) {
                     const cleanKeys = denumberName(card.keys.trim());
-                    if ((2 < cleanKeys.length) && checkPlurals(cleanKeys, t => isBanned(t))) {
+                    if ((2 < cleanKeys.length) && checkPlurals(cleanKeys, t => (isSystemBanned(t) || Internal.getBannedTitles().map(b => b.toLowerCase()).includes(t)))) {
                         checkRemaining();
                         continue;
                     }
@@ -5127,7 +5156,7 @@ description: {1 concise sentence narrative summary}
                     let title = "";
                     if (typeof hasEntryTitle === "string") {
                         repair = true;
-                        title = formatTitle(hasEntryTitle).newTitle;
+                        title = formatTitle(hasEntryTitle, true).newTitle;
                         if (hasDescTitle && bad()) {
                             title = parseTitle(false);
                         }
@@ -5147,7 +5176,7 @@ description: {1 concise sentence narrative summary}
                     }
                     if (bad()) {
                         repair = true;
-                        title = formatTitle(card.title).newTitle;
+                        title = formatTitle(card.title, true).newTitle;
                         if (bad()) {
                             release = true;
                         } else {
@@ -5180,13 +5209,13 @@ description: {1 concise sentence narrative summary}
                                 sourceText,
                                 /titles?\s*:[\s\S]*?}/i,
                                 /(?:titles?\s*:|})/gi
-                            )).newTitle; }
+                            ), true).newTitle; }
                         case 2: {
                             return formatTitle(isolateProperty(
                                 sourceText,
                                 /titles?\s*:[\s\S]*?(?:(?:limit|update)s?\s*:|})/i,
                                 /(?:(?:title|update|limit)s?\s*:|})/gi
-                            )).newTitle; }
+                            ), true).newTitle; }
                         default: {
                             return ""; }
                         }
@@ -5488,6 +5517,10 @@ description: {1 concise sentence narrative summary}
             readFromInputs: check(DEFAULT_DETECT_TITLES_FROM_INPUTS),
             // How many (minimum) actions in the past does Auto-Cards look for named entities?
             minimumLookBackDistance: validateMinLookBackDist(DEFAULT_MINIMUM_LOOK_BACK_DISTANCE),
+            // Allow manual player commands (/ec or /ac) to bypass common entity & banned title filters?
+            manualBypassTitleFilters: check(DEFAULT_MANUAL_BYPASS_TITLE_FILTERS, true),
+            // Filter common entities from background auto-detection?
+            filterCommonEntities: check(DEFAULT_FILTER_COMMON_ENTITIES, true),
             // Is Live Script Interface v2 enabled?
             LSIv2: (DEFAULT_DO_LSI_V2 === true) ? true : null,
 
@@ -5689,6 +5722,8 @@ description: {1 concise sentence narrative summary}
             "> Exclude all-caps from title detection: " + AC.config.ignoreAllCapsTitles,
             "> Also detect titles from player inputs: " + AC.config.readFromInputs,
             "> Minimum turns age for title detection: " + AC.config.minimumLookBackDistance,
+            "> Manual commands bypass title filters: " + AC.config.manualBypassTitleFilters,
+            "> Filter common entities from auto-detection: " + AC.config.filterCommonEntities,
             "> Use Live Script Interface v2: " + (AC.config.LSIv2 !== null),
             "> Trim story phrase frag: " + AC.config.trimPhraseFragStory,
             "> Trim story quote frag: " + AC.config.trimDelimiterFragStory,
@@ -6079,6 +6114,7 @@ description: {1 concise sentence narrative summary}
             if (!prefixPattern.test(command)) {
                 continue;
             }
+            const cmdPrefix = (command.match(/^\/\s*(A|E)C/i)?.[1]?.toUpperCase() || (AC.config.operatingMode === "entity" ? "E" : "A")) + "C";
             const [requestTitle, requestDetails, requestEntry] = (command
                 .replace(/(?:{\s*)|(?:\s*})/g, "")
                 .replace(prefixPattern, "")
@@ -6180,16 +6216,17 @@ description: {1 concise sentence narrative summary}
                 }
                 result += "\n\n";
                 function submitRequest(extra) {
+                    request.isManual = true;
                     O.f(request);
                     const [type, success] = (function() {
                         if (redo) {
                             return [" redo", Internal.redoCard(request, true, "")];
                         } else {
                             Internal.getUsedTitles(true);
-                            return ["", Internal.generateCard(request)];
+                            return ["", Internal.generateCard(request, ["", ""], true)];
                         }
                     })();
-                    const left = "/AC" + type + " {";
+                    const left = "/" + cmdPrefix + type + " {";
                     const right = "}" + extra;
                     if (success) {
                         const parsed = left + AC.generation.pending[AC.generation.pending.length - 1].title + right;
@@ -6647,7 +6684,7 @@ description: {1 concise sentence narrative summary}
     function see(arr) {
         return String.fromCharCode(...arr.map(n => Math.sqrt(n / 33)));
     }
-    function formatTitle(title) {
+    function formatTitle(title, isManual = false) {
         const input = title;
         let useMemo = false;
         if (
@@ -6657,6 +6694,7 @@ description: {1 concise sentence narrative summary}
                 (nameset.size === 1)
                 && nameset.has("%@%")
             ))
+            && !isManual
         ) {
             const pair = memoized.get(input);
             if (pair !== undefined) {
@@ -6736,28 +6774,28 @@ description: {1 concise sentence narrative summary}
                 titleWords = title.split(" ");
             }
         }
-        if (isUsedOrBanned(title) || isNamed(title)) {
+        if (isUsedOrBanned(title, isManual) || (!isManual && isNamed(title))) {
             return end();
         }
         // Procedurally generated story card trigger keywords exclude certain words and patterns which are otherwise permitted in titles
         let key = title;
         const peerage = new Set(Words.peerage);
         if (titleWords.some(word => ((word === "the") || peerage.has(word.toLowerCase())))) {
-            if (titleWords.length < 2) {
-                return end();
-            }
-            key = enforceBoundaryCondition(
-                titleWords.filter(word => !peerage.has(word.toLowerCase())).join(" ")
-            );
-            if (key.includes(" the ")) {
-                key = enforceBoundaryCondition(key.split(" the ")[0]);
-            }
-            if (isUsedOrBanned(key)) {
-                return end();
+            if (titleWords.length >= 2) {
+                let stripped = enforceBoundaryCondition(
+                    titleWords.filter(word => !peerage.has(word.toLowerCase())).join(" ")
+                );
+                if (stripped.includes(" the ")) {
+                    stripped = enforceBoundaryCondition(stripped.split(" the ")[0]);
+                }
+                const minLen = isManual ? 2 : 3;
+                if ((minLen <= stripped.length) && !isUsedOrBanned(stripped, isManual)) {
+                    key = stripped;
+                }
             }
         }
         function short() {
-            return (title.length < 3);
+            return (title.length < (isManual ? 2 : 3));
         }
         function enforceBoundaryCondition(str) {
             while (leadingMinorWordsKiller.test(str)) {
@@ -6780,8 +6818,9 @@ description: {1 concise sentence narrative summary}
         return end(title, key);
     }
     // I really hate english grammar
-    function checkPlurals(title, predicate) {
-        function check(t) { return ((t.length < 3) || (100 < t.length) || predicate(t)); }
+    function checkPlurals(title, predicate, isManual = false) {
+        const minLen = isManual ? 2 : 3;
+        function check(t) { return ((t.length < minLen) || (100 < t.length) || predicate(t)); }
         const t = title.toLowerCase();
         if (check(t)) { return true; }
         // s>p : singular -> plural : p>s: plural -> singular
@@ -6831,7 +6870,30 @@ description: {1 concise sentence narrative summary}
             break;
         } return false;
     }
-    function isUsedOrBanned(title) {
+    function isSystemBanned(lowerTitle) {
+        if (systemBans.size === 0) {
+            const controlVariants = getControlVariants();
+            const dataVariants = getDataVariants();
+            const sys = lowArr([
+                controlVariants.enable.title.replace("\n", ""),
+                controlVariants.enable.keys,
+                controlVariants.configure.title.replace("\n", ""),
+                controlVariants.configure.keys,
+                controlVariants.configureEC.title.replace("\n", ""),
+                controlVariants.configureEC.keys,
+                dataVariants.debug.title,
+                dataVariants.debug.keys,
+                dataVariants.critical.title,
+                dataVariants.critical.keys,
+                ...Object.values(Words.reserved)
+            ]);
+            for (let i = 0; i < sys.length; i++) {
+                systemBans.add(sys[i]);
+            }
+        }
+        return systemBans.has(lowerTitle);
+    }
+    function isUsedOrBanned(title, isManual = false) {
         function isUsed(lowerTitle) {
             if (used.size === 0) {
                 const usedTitles = Internal.getUsedTitles();
@@ -6845,28 +6907,21 @@ description: {1 concise sentence narrative summary}
             }
             return used.has(lowerTitle);
         }
+        if (isManual) {
+            return checkPlurals(title, t => (isUsed(t) || isSystemBanned(t)), true);
+        }
         return checkPlurals(title, t => (isUsed(t) || isBanned(t)));
     }
     function isBanned(lowerTitle, getUsedIsExternal) {
+        if (isSystemBanned(lowerTitle)) {
+            return true;
+        }
         if (bans.size === 0) {
             // In order to save space, implicit bans aren't listed within the UI
-            const controlVariants = getControlVariants();
-            const dataVariants = getDataVariants();
             const bansToAdd = [...lowArr([
-                ...Internal.getBannedTitles(),
-                controlVariants.enable.title.replace("\n", ""),
-                controlVariants.enable.keys,
-                controlVariants.configure.title.replace("\n", ""),
-                controlVariants.configure.keys,
-                controlVariants.configureEC.title.replace("\n", ""),
-                controlVariants.configureEC.keys,
-                dataVariants.debug.title,
-                dataVariants.debug.keys,
-                dataVariants.critical.title,
-                dataVariants.critical.keys,
-                ...Object.values(Words.reserved)
+                ...Internal.getBannedTitles()
             ]), ...(function() {
-                if (shouldProceed() || getUsedIsExternal) {
+                if ((shouldProceed() || getUsedIsExternal) && (AC.config.filterCommonEntities !== false)) {
                     // These proper nouns are way too common to waste card generations on; they already exist within the AI training data so this would be pointless
                     return [...Words.entities, ...Words.undesirables.map(undesirable => see(undesirable))];
                 } else {

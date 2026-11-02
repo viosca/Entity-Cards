@@ -76,6 +76,8 @@ Pinned near the top of your story cards list, this compact card manages core eng
 * `> Pin this config card near the top:` Keeps configuration cards accessible
 * `> Generate memories for new cards:` Memory update monitoring (`true`/`false`)
 * `> Exclude all-caps from title detection:` Prevents false positives from capitalized UI text
+* `> Manual commands bypass title filters:` Allows explicit `/ec` and `/ac` commands to generate common entities, real-world locations, and short character names (`true`/`false`, default `true`)
+* `> Filter common entities from auto-detection:` Controls whether passive background auto-detection ignores common real-world cities, countries, and planets (`true`/`false`, default `true`)
 
 ### 2. "Configure Entity Cards" (Companion Card)
 Dedicated to Named Entity Recognition and prompt customization:
