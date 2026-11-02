@@ -47,7 +47,13 @@ function AutoCards(inHook, inText, inStop) {
      * 2. ENTITY CARDS (*EC) UNIQUE SETTINGS (Active in "entity" mode)
      * ========================================================================= */
     // [*EC] Maximum allowed length for newly generated entity cards in EC mode (200 to 2000)
-    const DEFAULT_EC_GENERATED_ENTRY_LIMIT = 1000
+    const DEFAULT_EC_GENERATED_ENTRY_LIMIT = 700
+
+    // [*EC] Active template preset for newly generated entities: "standard", "lite", "authoring", or "custom"
+    const DEFAULT_EC_PRESET = "standard"
+
+    // [*EC] Automatically select preset based on detected AI Dungeon story model?
+    const DEFAULT_EC_AUTO_PRESET = true
 
     // [*EC] Replacement string for "World Lore:" header in context (set to "" to leave unchanged)
     const DEFAULT_EC_CONTEXT_HEADER = "Named Entities (NER):"
@@ -83,56 +89,234 @@ function AutoCards(inHook, inText, inStop) {
     const DEFAULT_EC_SHOW_DEBUG_RAWAI_ENTRY = false
     const DEFAULT_EC_SHOW_DEBUG_RAWAI_MEMORY = false
 
-    // [*EC] AI prompt used to generate new story card in Entity (NER) JellyFish format
-    const DEFAULT_EC_CARD_GENERATION_PROMPT =
-`-----
+    // [*EC] Preset dictionaries for Entity Cards prompts
+    const EC_PRESETS = {
+        standard: `-----
 <SYSTEM>
 [# AI, stop the story and ignore previous instructions.
-#! This is JellyFish (JFSH), a block structured AI pseudo language that is a blend of C/C++/JavaScript/JSON/Kotlin. AI, just go with the flow.
-# In JFSH, identifiers have meanings that the AI can use. They are like nouns and verbs. Comments also provide AI direction. Program flow provides the 'when'.
-
-// Determine the entityType of '%{title}' as a Person, Organization, Location, Event, or Thing. 
-// If there are multiple entityTypes for a '%{title}', use precedence high to low: Person, Organization, Location, Event, Thing.
-// From the current story or fanfiction universe and the selected template, fill out the {Paceholders} and strip out the comments.
-// High information/token density is the key. Be concise and grounded. Avoid stating the obvious.
-// Avoid short-term temporary details or appearances, instead focus on plot-significant information.
-// If information is unknown but can be reasonably assumed from the story or fanfiction universe, use that, or create something reasonable. 
-// For lists, write only brief third-person imperative items assuming the subject of 'name'. Use pronouns only if needed.
-// For {Description}, write only a very brief third-person imperative statement assuming the subject of 'name'. Use pronouns only if needed.
-// Resume an incomplete entity from where  it left off - Never restart or restate previous work.
-// When the entity is complete, always generate the end sentinel: '%SC_END_SENTINEL%'
-// Never return an empty string.
-// AI, your output is read by a script. Anything outside of the sentinels is not visible. Simply output the entity, stop, and await next instructions.
+#! This is JellyFish (JFSH). Follow program flow and directives.
+// From story context, determine the entityType of '%{title}' as Person, Location, Organization, Thing, or Event.
+// Precedence if ambiguous: Person > Organization > Location > Event > Thing.
+// Fill out the matching template with concise, plot-significant details.
+// High token density is key. Keep list items and fields to brief phrases (under 10 words each).
+// For description, write 1 concise sentence.
+// Output strictly between %SC_BEGIN_SENTINEL% and %SC_END_SENTINEL% sentinels.
+// Anything outside the sentinels will be discarded. No conversational filler.
 
 if (entityType is 'Person') {
-    print \`
+print \`
 %SC_BEGIN_SENTINEL%
-- Type: Person, {Optional Entity Subtype}.
-- Name: %{title}.
-- Bio: {Age}, {Gender}, {Pronouns}, {Occupation}.
-- Physique: {Height}, {Weight}, {Features}... // i.e. hair, eyes, height, weight, body tone, measurements (just numbers and -'s), etc...
-- Appearance: {Typical Appearance}. // i.e. briefly their normal attire/style.
-- Archetypes: {Character Archetypes}. // 1 or 2 archetypes.
-- Tropes: {Character Tropes}. // 1 or 2 tropes. Imperative pure prose list.
-- Psyche: {Traits}, {Motivations}, {Flaws}... // imperative pure prose list, briefly.
-- MBTI: {CODE} - {type}
-- Description: {Description}. // i.e. One sentence imperative pure prose description, 200 characters max.
-- End Sentinel: %SC_END_SENTINEL% // Important: complete your Entity work with this sentinel!
+entity: %{title}
+type: Person
+category: {Archetype or occupation}
+appearance: {brief visual traits and attire}
+personality: {demeanor and voice/attitude toward player}
+drive: {primary motive or secret goal}
+connections: {ties to protagonist or factions}
+description: {1 concise sentence narrative summary}
+%SC_END_SENTINEL%
 \`;
-} 
-else {
-    print \`
+} else if (entityType is 'Location') {
+print \`
 %SC_BEGIN_SENTINEL%
-- Name: %{title}.
-- Type: {EntityType}, {Optional Entity Subtype}.
-- Description: {Description}. // i.e. One sentence imperative pure prose description, 200 characters max.
-- End Sentinel: %SC_END_SENTINEL% // Important: complete your Entity work with this sentinel!
+entity: %{title}
+type: Location
+category: {Metropolis / District / Facility / Wilderness}
+atmosphere: {Sensory mood, ambient tone}
+key_locations:
+- {Landmark 1}: {concise phrase}
+- {Landmark 2}: {concise phrase}
+connections: {concise phrase tying to protagonists or plot}
+description: {1 concise sentence narrative summary}
+%SC_END_SENTINEL%
+\`;
+} else if (entityType is 'Organization') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Organization
+category: {Syndicate / Megacorp / Guild / Faction}
+public_face: {reputation and known operations}
+true_agenda: {hidden motives or covert goals}
+reach: {influence, resources, or territory}
+stance: {attitude toward protagonist and rivals}
+description: {1 concise sentence narrative summary}
+%SC_END_SENTINEL%
+\`;
+} else if (entityType is 'Thing') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Thing
+category: {Device / Relic / Weapon / Access Key}
+physical: {form, materials, distinctive markings}
+function: {capabilities, utility, or effects}
+rules: {requirements, limits, or risks}
+bearer: {current owner or location}
+description: {1 concise sentence origin and significance}
+%SC_END_SENTINEL%
+\`;
+} else {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Event
+category: {Crisis / Cyber-Attack / Breach / Operation}
+status: {Past / Ongoing / Impending}
+key_actors: {instigators, targets, or affected groups}
+stakes: {cause and what is won or lost}
+atmosphere: {tension, aftermath, and social mood}
+description: {1 concise sentence summary and fallout}
+%SC_END_SENTINEL%
 \`;
 }
 ]
 </SYSTEM>
 %{entry}
-`;
+`,
+        lite: `-----
+<SYSTEM>
+[# AI, stop the story and ignore previous instructions.
+#! This is JellyFish (JFSH). Follow program flow and directives.
+// From story context, determine the entityType of '%{title}'.
+// Fill out the matching flat template with concise details.
+// Output strictly between %SC_BEGIN_SENTINEL% and %SC_END_SENTINEL% sentinels.
+
+if (entityType is 'Person') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Person
+category: {occupation or role}
+appearance: {brief visual features}
+personality: {key traits and attitude}
+description: {1 sentence summary}
+%SC_END_SENTINEL%
+\`;
+} else if (entityType is 'Location') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Location
+category: {type of place}
+atmosphere: {sensory tone and mood}
+description: {1 sentence summary}
+%SC_END_SENTINEL%
+\`;
+} else if (entityType is 'Organization') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Organization
+category: {faction or company type}
+agenda: {main goal or motive}
+description: {1 sentence summary}
+%SC_END_SENTINEL%
+\`;
+} else if (entityType is 'Thing') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Thing
+category: {item type}
+function: {what it does}
+description: {1 sentence summary}
+%SC_END_SENTINEL%
+\`;
+} else {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Event
+category: {incident type}
+status: {Past / Ongoing / Impending}
+description: {1 sentence summary}
+%SC_END_SENTINEL%
+\`;
+}
+]
+</SYSTEM>
+%{entry}
+`,
+        authoring: `-----
+<SYSTEM>
+[# AI, stop the story and ignore previous instructions.
+#! This is JellyFish (JFSH). Follow program flow and directives.
+// Writing assistant directive: generate plot-significant YAML entity card for '%{title}'.
+// Focus on narrative function, scene dynamics, character secrets, and narrative stakes.
+// Output strictly between %SC_BEGIN_SENTINEL% and %SC_END_SENTINEL% sentinels.
+
+if (entityType is 'Person') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Person
+role: {narrative function, e.g. Catalyst, Rival, Mentor}
+appearance: {salient sensory details and attire}
+secrets: {hidden agenda, fear, or vulnerability}
+scene_dynamics: {attitude toward protagonist and behavioral quirks}
+description: {1 concise sentence narrative summary}
+%SC_END_SENTINEL%
+\`;
+} else if (entityType is 'Location') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Location
+role: {narrative purpose, e.g. Neutral Haven, Trap, Crucible}
+atmosphere: {sensory mood, lighting, environmental hazards}
+key_points:
+- {Landmark 1}: {narrative significance}
+- {Landmark 2}: {narrative significance}
+scene_dynamics: {dangers or opportunities present}
+description: {1 concise sentence narrative summary}
+%SC_END_SENTINEL%
+\`;
+} else if (entityType is 'Organization') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Organization
+role: {conflict role, e.g. Puppeteer, Antagonist, Faction in decline}
+public_face: {reputation and facade}
+true_agenda: {covert objective}
+stance: {posture toward protagonist}
+description: {1 concise sentence narrative summary}
+%SC_END_SENTINEL%
+\`;
+} else if (entityType is 'Thing') {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Thing
+role: {MacGuffin, Tool of survival, Symbol}
+physical: {appearance and material presence}
+powers_or_risk: {capabilities and cost/danger}
+bearer: {current possessor}
+description: {1 concise sentence narrative summary}
+%SC_END_SENTINEL%
+\`;
+} else {
+print \`
+%SC_BEGIN_SENTINEL%
+entity: %{title}
+type: Event
+role: {Inciting Incident, Climax, Ticking Clock}
+status: {Past lore / Ongoing crisis / Impending threat}
+stakes: {what changes if resolved or failed}
+atmosphere: {emotional tone and tension}
+description: {1 concise sentence narrative summary}
+%SC_END_SENTINEL%
+\`;
+}
+]
+</SYSTEM>
+%{entry}
+`
+    };
+
+    // [*EC] AI prompt used to generate new story card in Entity (NER) JellyFish format
+    const DEFAULT_EC_CARD_GENERATION_PROMPT = EC_PRESETS.standard;
 
 
     /* =========================================================================
@@ -660,7 +844,8 @@ else {
                 "trimPhraseFragCards", "trimDelimiterFragCards", "stripAsterisksCards", "prettifyEmDashesCards",
                 "operatingMode", "ECContextHeader", "autoTypeCards", "trimPhraseFragStory", "trimDelimiterFragStory", "stripAsterisksStory", "prettifyEmDashesStory", "normalizeWhitespaceStory",
                 "SCContainerize", "SCContainerOpen", "SCContainerClose", "SCContainerAIBeginSentinel", "SCContainerAIEndSentinel",
-                "showDebugData", "showDebugDataSCRawAIEntry", "showDebugDataSCRawAIMemory", "generationPrompt", "compressionPrompt", "defaultCardType"
+                "showDebugData", "showDebugDataSCRawAIEntry", "showDebugDataSCRawAIMemory", "generationPrompt", "compressionPrompt", "defaultCardType",
+                "ECPreset", "ECAutoPreset"
             ],
             signal: [
                 "emergencyHalt", "forceToggle", "overrideBans", "swapControlCards", "recheckRetryOrErase", "maxChars", "outputReplacement", "upstreamError"
@@ -1991,6 +2176,7 @@ else {
             const configureCard = getSingletonCard(true, configureCardTemplate);
             banTitle(configureCardTemplate.title);
             pinAndSortCards(configureCard);
+            processECConfigureCard();
             const bansOverwritten = (0 < AC.signal.overrideBans);
             if ((configureCard.description !== configureCardTemplate.description) || bansOverwritten) {
                 const descConfigPatterns = (getConfigureCardDescription()
@@ -2004,21 +2190,27 @@ else {
                     .map(descPattern => (new RegExp("^\\s*" + descPattern + "\\s*:", "i")))
                 );
                 const descConfigs = configureCard.description.split(Words.delimiter).slice(1);
+                const isEntity = (AC.config.operatingMode === "entity");
                 if (
                     (descConfigs.length === descConfigPatterns.length)
                     && descConfigs.every((descConfig, index) => descConfigPatterns[index].test(descConfig))
                 ) {
                     // All description config headers must be present and well-formed
-                    let cfg = extractDescSetting(0);
-                    if (AC.config.generationPrompt !== cfg) {
-                        notify("Changes to your card generation prompt were successfully saved");
-                        AC.config.generationPrompt = cfg;
-                        //logEvent(cfg);
+                    if (!isEntity) {
+                        let cfg = extractDescSetting(0);
+                        if (AC.config.generationPrompt !== cfg) {
+                            notify("Changes to your card generation prompt were successfully saved");
+                            AC.config.generationPrompt = cfg;
+                            //logEvent(cfg);
+                        }
                     }
-                    cfg = extractDescSetting(1);
-                    if (AC.config.compressionPrompt !== cfg) {
+                    const compIdx = isEntity ? 0 : 1;
+                    const bansIdx = isEntity ? 1 : 2;
+
+                    let compCfg = extractDescSetting(compIdx);
+                    if (AC.config.compressionPrompt !== compCfg) {
                         notify("Changes to your card memory compression prompt were successfully saved");
-                        AC.config.compressionPrompt = cfg;
+                        AC.config.compressionPrompt = compCfg;
                         //logEvent(cfg);
                     }
                     if (bansOverwritten) {
@@ -2028,12 +2220,12 @@ else {
                         const pendingRewrites = new Set(
                             lowArr([...pendingBans, ...AC.database.titles.pendingUnbans.map(pair => pair[0])])
                         );
-                        Internal.setBannedTitles([...pendingBans, ...extractDescSetting(2)
+                        Internal.setBannedTitles([...pendingBans, ...extractDescSetting(bansIdx)
                             .split(",")
                             .filter(newBan => !pendingRewrites.has(newBan.toLowerCase().replace(/\s+/, " ").trim()))
                         ], true);
                     } else {
-                        Internal.setBannedTitles(extractDescSetting(2).split(","), true);
+                        Internal.setBannedTitles(extractDescSetting(bansIdx).split(","), true);
                     }
                     function extractDescSetting(index) {
                         return descConfigs[index].replace(descConfigPatterns[index], "").trim();
@@ -2140,26 +2332,7 @@ else {
                 const modeChanged = parseConfig("operatingmode", "string", "operatingMode");
                 if (modeChanged) {
                     const isNowEntity = !cfg.toLowerCase().includes("classic");
-                    AC.config.operatingMode = isNowEntity ? "entity" : "classic";
-                    if (isNowEntity) {
-                        AC.config.SCContainerize = true;
-                        AC.config.rawAIPromptMode = true;
-                        AC.config.rawAIResponseMode = true;
-                        AC.config.autoTypeCards = true;
-                        AC.config.bulletedListMode = false;
-                        AC.config.generationPrompt = DEFAULT_EC_CARD_GENERATION_PROMPT;
-                        AC.config.defaultEntryLimit = validateEntryLimit(DEFAULT_EC_GENERATED_ENTRY_LIMIT);
-                        notify("Operating Mode set to: Entity Cards");
-                    } else {
-                        AC.config.SCContainerize = false;
-                        AC.config.rawAIPromptMode = false;
-                        AC.config.rawAIResponseMode = false;
-                        AC.config.autoTypeCards = false;
-                        AC.config.bulletedListMode = true;
-                        AC.config.generationPrompt = DEFAULT_AC_CARD_GENERATION_PROMPT;
-                        AC.config.defaultEntryLimit = validateEntryLimit(DEFAULT_GENERATED_ENTRY_LIMIT);
-                        notify("Operating Mode set to: Classic Auto-Cards");
-                    }
+                    applyModeSwitch(isNowEntity ? "entity" : "classic");
                 }
                 if (parseConfig("entitycardscontextheader", "string", "ECContextHeader")) {
                     notify("Entity Cards context header has been set to: \"" + cfg + "\"");
@@ -3390,10 +3563,16 @@ else {
                             AC.generation.workpiece.entry = AC.generation.workpiece.entry.replace(beginSentinelRx, "");
                         }
 
+                        // Strip leading and trailing code fences (e.g. ```yaml, ```, '''yaml, ''')
+                        AC.generation.workpiece.entry = AC.generation.workpiece.entry
+                            .replace(/^\s*(?:```|''')(?:yaml)?\s*/i, "")
+                            .replace(/\s*(?:```|''')\s*$/i, "");
+
                         // We do some cleanup between generations to keep the AI from developing bad patterns.
                         AC.generation.workpiece.entry = AC.generation.workpiece.entry
                             .replace(/\s*\/\/[^\n]*\n/gm, '') // Strip out any JavaScript line style comments.
                             .replace(/(?<=\d)"/g, '') // clean up measurements to remove double quotes.
+                            .replace(/^[—–]\s*/gm, "- ") // normalize em-dash bullets
                             .replace(/\s*-\s+(?=[^\n]+:)/g, "\n- ") // clean up dashed list items so they're on their own lines.
                             ;
                         //logEvent("outputModifier: workpiece.entry/after subst: " + AC.generation.workpiece.entry);
@@ -3413,14 +3592,14 @@ else {
                             )
                         ;
 
-                        // Define the regular expression for entity type detection
-                        const entityTypeRegex = /^- Type: ([^,]+),/m;
+                        // Define the regular expression for entity type detection (bullet-agnostic, quote-tolerant)
+                        const entityTypeRegex = /(?:^|\n)[-—–]?\s*Type:\s*["']?([^,\n"']+)/mi;
                         const entityTypeMatch = AC.generation.workpiece.entry.match(entityTypeRegex);
                         const entityType = (AC.config.autoTypeCards && entityTypeMatch) ? entityTypeMatch[1].trim() : AC.config.defaultCardType;
                         
                         // Check if the entity has finished: either via end sentinel or completed Description field
-                        // Both Person and non-Person templates terminate with "- Description: <text>."
-                        const hasFinishedDescription = /(?:^|\n)-\s*Description:\s*[\s\S]+?[\.!\?]["']?\s*$/i.test(AC.generation.workpiece.entry.trim());
+                        // All 5 core NER schemas terminate with "Description: <text>."
+                        const hasFinishedDescription = /(?:^|\n)[-—–]?\s*Description:\s*[\s\S]+?[\.!\?]["']?\s*$/i.test(AC.generation.workpiece.entry.trim());
 
                         // If the end sentinel was seen or the final Description field is complete, we're done.
                         if (sawEndSentinel || hasFinishedDescription) {
@@ -3588,6 +3767,12 @@ else {
                                     const endSentinelRx = new RegExp(`(?:\\n[^\\n]*|\\s*)${endSentinelEscaped}[\\s\\S]*$`, 'i');
                                     cleanEntry = cleanEntry.replace(endSentinelRx, "");
                                 }
+                                // Strip leading code fences (```yaml or ``` or '''yaml or ''')
+                                cleanEntry = cleanEntry.replace(/^\s*(?:```|''')(?:yaml)?\s*/i, "");
+                                // Strip trailing code fences
+                                cleanEntry = cleanEntry.replace(/\s*(?:```|''')\s*$/i, "");
+                                // Normalize em-dash / en-dash bullets
+                                cleanEntry = cleanEntry.replace(/^[—–]\s*/gm, "- ");
                                 cleanEntry = cleanEntry.trim();
                                 const titleHeader = "{title: " + AC.generation.workpiece.title + "}";
                                 return titleHeader + "\n" + cleanEntry;
@@ -3840,74 +4025,6 @@ else {
             return str.replace(/(?<!^\s*)(?: - | ?– ?)(?!\s*$)/g, "—");
         }
             */
-        function getConfigureCardTemplate() {
-            const names = getControlVariants().configure;
-            return O.f({
-                type: AC.config.defaultCardType,
-                title: names.title,
-                keys: names.keys,
-                entry: getConfigureCardEntry(),
-                description: getConfigureCardDescription()
-            });
-        }
-        function getConfigureCardEntry() {
-            return prose(
-                "> Auto-Cards / Entity Cards automatically creates and updates plot-relevant story cards while you play. Settings labeled with *EC are specific to Entity Cards. You may configure the following settings by replacing \"false\" with \"true\" (and vice versa) or by adjusting numbers/strings for the appropriate settings.",
-                "> Disable Auto-Cards: false",
-                "> *EC Operating Mode: " + (AC.config.operatingMode === "entity" ? "Entity Cards" : "Classic Auto-Cards"),
-                "> *EC Context Header: " + stringifyObject(AC.config.ECContextHeader),
-                "> Show detailed guide: false",
-                "> Delete all automatic story cards: false",
-                "> Reset all config settings and prompts: false",
-                "> Pin this config card near the top: " + AC.config.pinConfigureCard,
-                "> Minimum turns cooldown for new cards: " + AC.config.addCardCooldown,
-                "> New cards use a bulleted list format: " + AC.config.bulletedListMode,
-                "> *EC Raw AI Prompt Mode: " + AC.config.rawAIPromptMode,
-                "> *EC Raw AI Response Mode: " + AC.config.rawAIResponseMode,
-                "> *EC Auto-Type Story Cards: " + AC.config.autoTypeCards,
-                "> Maximum entry length for new cards: " + AC.config.defaultEntryLimit,
-                "> New cards perform memory updates: " + AC.config.defaultCardsDoMemoryUpdates,
-                "> Card memory bank preferred length: " + AC.config.defaultMemoryLimit,
-                "> Memory summary compression ratio: " + AC.config.memoryCompressionRatio,
-                "> Exclude all-caps from title detection: " + AC.config.ignoreAllCapsTitles,
-                "> Also detect titles from player inputs: " + AC.config.readFromInputs,
-                "> Minimum turns age for title detection: " + AC.config.minimumLookBackDistance,
-                "> Use Live Script Interface v2: " + (AC.config.LSIv2 !== null),
-
-                "> *EC Trim card phrase frag: " + AC.config.trimPhraseFragCards,
-                "> *EC Trim card quote frag: " + AC.config.trimDelimiterFragCards,
-                "> *EC Strip card asterisks: " + AC.config.stripAsterisksCards,
-                "> *EC Prettify card em dashes: " + AC.config.prettifyEmDashesCards,
-                
-                "> Trim story phrase frag: " + AC.config.trimPhraseFragStory,
-                "> Trim story quote frag: " + AC.config.trimDelimiterFragStory,
-                "> Strip story asterisks: " + AC.config.stripAsterisksStory,
-                "> Prettify story em dashes: " + AC.config.prettifyEmDashesStory,
-                "> Normalize story whitespace: " + AC.config.normalizeWhitespaceStory,
-                
-                "> *EC Use custom story card container: " + AC.config.SCContainerize,
-                "> *EC Custom container open string: " + stringifyObject(AC.config.SCContainerOpen),
-                "> *EC Custom container close string: " + stringifyObject(AC.config.SCContainerClose),
-                "> *EC Custom container AI begin sentinel: " + stringifyObject(AC.config.SCContainerAIBeginSentinel),
-                "> *EC Custom container AI end sentinel: " + stringifyObject(AC.config.SCContainerAIEndSentinel),
-                "> Log debug data in a separate card: " + AC.config.showDebugData,
-                "> *EC Log raw AI entry data: " + AC.config.showDebugDataSCRawAIEntry,
-                "> *EC Log raw AI memory data: " + AC.config.showDebugDataSCRawAIMemory
-            );
-        }
-        function getConfigureCardDescription() {
-            return limitString(O.v(prose(
-                Words.delimiter,
-                "> AI prompt to generate new cards:",
-                limitString(AC.config.generationPrompt.trim(), 4350).trimEnd(),
-                Words.delimiter,
-                "> AI prompt to summarize card memories:",
-                limitString(AC.config.compressionPrompt.trim(), 4350).trimEnd(),
-                Words.delimiter,
-                "> Titles banned from new card creation:",
-                AC.database.titles.banned.join(", ")
-            )), 9850);
-        }
     } else {
         // Auto-Cards is currently disabled
         switch(HOOK) {
@@ -3974,18 +4091,6 @@ else {
         default: {
             CODOMAIN.initialize(TEXT);
             break; }
-        }
-        function getEnableCardTemplate() {
-            const names = getControlVariants().enable;
-            return O.f({
-                type: AC.config.defaultCardType,
-                title: names.title,
-                keys: names.keys,
-                entry: prose(
-                    "> Auto-Cards automatically creates and updates plot-relevant story cards while you play. To enable this system, simply edit the \"false\" below to say \"true\" instead!",
-                    "> Enable Auto-Cards: false"),
-                description: "Perform any Do/Say/Story/Continue action within your adventure to apply this change!"
-            });
         }
     }
     function hoistConst() { return (class Const {
@@ -5345,6 +5450,9 @@ else {
             operatingMode: mode,
             // Header to replace "World Lore:" in context
             ECContextHeader: check(DEFAULT_EC_CONTEXT_HEADER, "Named Entities (NER):", "string"),
+            // Entity Cards Presets
+            ECPreset: check(DEFAULT_EC_PRESET, "standard", "string"),
+            ECAutoPreset: check(DEFAULT_EC_AUTO_PRESET, true, "boolean"),
             // Delete all previously generated story cards?
             deleteAllAutoCards: null,
             // Pin the configuration interface story card near the top?
@@ -5539,6 +5647,304 @@ else {
         }
         return keys;
     }
+    function getEnableCardTemplate() {
+        const names = getControlVariants().enable;
+        return O.f({
+            type: AC.config.defaultCardType,
+            title: names.title,
+            keys: names.keys,
+            entry: prose(
+                "> Auto-Cards automatically creates and updates plot-relevant story cards while you play. To enable this system, simply edit the \"false\" below to say \"true\" instead!",
+                "> Enable Auto-Cards: false"),
+            description: "Perform any Do/Say/Story/Continue action within your adventure to apply this change!"
+        });
+    }
+    function getConfigureCardTemplate() {
+        const names = getControlVariants().configure;
+        return O.f({
+            type: AC.config.defaultCardType,
+            title: names.title,
+            keys: names.keys,
+            entry: getConfigureCardEntry(),
+            description: getConfigureCardDescription()
+        });
+    }
+    function getConfigureCardEntry() {
+        const isEntity = (AC.config.operatingMode === "entity");
+        return prose(
+            "> Auto-Cards / Entity Cards automatically creates and updates plot-relevant story cards while you play. Configure settings by replacing \"false\" with \"true\" (and vice versa) or by adjusting numbers/strings.",
+            "> Disable Auto-Cards: false",
+            "> Operating Mode: " + (isEntity ? "Entity Cards" : "Classic Auto-Cards"),
+            "> Show detailed guide: false",
+            "> Delete all automatic story cards: false",
+            "> Reset all config settings and prompts: false",
+            "> Pin this config card near the top: " + AC.config.pinConfigureCard,
+            "> Minimum turns cooldown for new cards: " + AC.config.addCardCooldown,
+            ...(isEntity ? [] : ["> New cards use a bulleted list format: " + AC.config.bulletedListMode]),
+            "> Maximum entry length for new cards: " + AC.config.defaultEntryLimit,
+            "> New cards perform memory updates: " + AC.config.defaultCardsDoMemoryUpdates,
+            "> Card memory bank preferred length: " + AC.config.defaultMemoryLimit,
+            "> Memory summary compression ratio: " + AC.config.memoryCompressionRatio,
+            "> Exclude all-caps from title detection: " + AC.config.ignoreAllCapsTitles,
+            "> Also detect titles from player inputs: " + AC.config.readFromInputs,
+            "> Minimum turns age for title detection: " + AC.config.minimumLookBackDistance,
+            "> Use Live Script Interface v2: " + (AC.config.LSIv2 !== null),
+            "> Trim story phrase frag: " + AC.config.trimPhraseFragStory,
+            "> Trim story quote frag: " + AC.config.trimDelimiterFragStory,
+            "> Strip story asterisks: " + AC.config.stripAsterisksStory,
+            "> Prettify story em dashes: " + AC.config.prettifyEmDashesStory,
+            "> Normalize story whitespace: " + AC.config.normalizeWhitespaceStory,
+            "> Log debug data in a separate card: " + AC.config.showDebugData
+        );
+    }
+    function getConfigureCardDescription() {
+        const isEntity = (AC.config.operatingMode === "entity");
+        return limitString(O.v(prose(
+            Words.delimiter,
+            ...(isEntity ? [] : [
+                "> AI prompt to generate new cards:",
+                limitString(AC.config.generationPrompt.trim(), 4350).trimEnd(),
+                Words.delimiter
+            ]),
+            "> AI prompt to summarize card memories:",
+            limitString(AC.config.compressionPrompt.trim(), 4350).trimEnd(),
+            Words.delimiter,
+            "> Titles banned from new card creation:",
+            AC.database.titles.banned.join(", ")
+        )), 9850);
+    }
+    function getECConfigureCardTemplate() {
+        const names = getControlVariants().configureEC;
+        return O.f({
+            type: AC.config.defaultCardType,
+            title: names.title,
+            keys: names.keys,
+            entry: getECConfigureCardEntry(),
+            description: getECConfigureCardDescription()
+        });
+    }
+    function getECConfigureCardEntry() {
+        const isActive = (AC.config.operatingMode === "entity");
+        const presetLabel = AC.config.ECPreset ? (AC.config.ECPreset[0].toUpperCase() + AC.config.ECPreset.slice(1).toLowerCase()) : "Standard";
+        return prose(
+            "> Entity Cards (EC) configuration. When in Classic Auto-Cards mode, this card is marked Inactive but preserved.",
+            "> Status: " + (isActive ? "Active" : "Inactive"),
+            "> Active Preset: " + presetLabel,
+            "> Auto-select preset by model: " + AC.config.ECAutoPreset,
+            "> Context Header: " + JSON.stringify(AC.config.ECContextHeader),
+            "> Auto type story cards: " + AC.config.autoTypeCards,
+            "> Use custom container: " + AC.config.SCContainerize,
+            "> Container open string: " + JSON.stringify(AC.config.SCContainerOpen),
+            "> Container close string: " + JSON.stringify(AC.config.SCContainerClose),
+            "> AI begin sentinel: " + JSON.stringify(AC.config.SCContainerAIBeginSentinel),
+            "> AI end sentinel: " + JSON.stringify(AC.config.SCContainerAIEndSentinel),
+            "> Trim card phrase frags: " + AC.config.trimPhraseFragCards,
+            "> Trim card quote frags: " + AC.config.trimQuoteFragCards,
+            "> Trim card delimiter frags: " + AC.config.trimDelimiterFragCards,
+            "> Strip card asterisks: " + AC.config.stripAsterisksCards,
+            "> Prettify card em dashes: " + AC.config.prettifyEmDashesCards,
+            "> Log raw ai entry data: " + AC.config.showDebugDataSCRawAIEntry,
+            "> Log raw ai memory data: " + AC.config.showDebugDataSCRawAIMemory
+        );
+    }
+    function getECConfigureCardDescription() {
+        return limitString(O.v(prose(
+            Words.delimiter,
+            "> AI prompt to generate new entity cards (live editable template):",
+            limitString(AC.config.generationPrompt.trim(), 4350).trimEnd()
+        )), 9850);
+    }
+    function detectModelTier() {
+        const model = ((typeof info === "object" && info?.storyModel?.name) || "").toLowerCase();
+        if (!model) return "standard";
+        if (/fable|muse|wayfarer small|madness/i.test(model)) {
+            return "lite";
+        }
+        if (/author|writer|co-writer/i.test(model)) {
+            return "authoring";
+        }
+        return "standard";
+    }
+    function applyModeSwitch(newMode) {
+        const isNowEntity = (newMode === "entity");
+        AC.config.operatingMode = isNowEntity ? "entity" : "classic";
+        AC.config.SCContainerize = isNowEntity;
+        AC.config.rawAIPromptMode = isNowEntity;
+        AC.config.rawAIResponseMode = isNowEntity;
+        AC.config.autoTypeCards = isNowEntity;
+        AC.config.bulletedListMode = !isNowEntity;
+        AC.config.generationPrompt = isNowEntity ? (EC_PRESETS[AC.config.ECPreset] || DEFAULT_EC_CARD_GENERATION_PROMPT) : DEFAULT_AC_CARD_GENERATION_PROMPT;
+        AC.config.defaultEntryLimit = validateEntryLimit(isNowEntity ? DEFAULT_EC_GENERATED_ENTRY_LIMIT : DEFAULT_GENERATED_ENTRY_LIMIT);
+
+        // Sync master card
+        const masterTitle = getControlVariants().configure.title;
+        const masterCard = Internal.getCard(c => c && c.title === masterTitle);
+        if (masterCard) {
+            masterCard.entry = masterCard.entry.replace(
+                /(?:>\s*)?(?:\*EC\s+)?Operating Mode:\s*[^\n]+/i,
+                "> Operating Mode: " + (isNowEntity ? "Entity Cards" : "Classic Auto-Cards")
+            );
+            masterCard.entry = masterCard.entry.replace(
+                /(?:>\s*)?Maximum entry length for new cards:\s*\d+/i,
+                "> Maximum entry length for new cards: " + AC.config.defaultEntryLimit
+            );
+            masterCard.description = getConfigureCardDescription();
+        }
+
+        // Sync companion card non-destructively
+        const ecTemplate = getECConfigureCardTemplate();
+        banTitle(ecTemplate.title);
+        const ecCard = getSingletonCard(isNowEntity, ecTemplate);
+        if (ecCard && ecCard.entry) {
+            ecCard.entry = ecCard.entry.replace(
+                /(?:>\s*)?Status:\s*[^\n]+/i,
+                "> Status: " + (isNowEntity ? "Active" : "Inactive")
+            );
+        }
+
+        notify("Operating Mode set to: " + (isNowEntity ? "Entity Cards" : "Classic Auto-Cards"));
+    }
+    function processECConfigureCard() {
+        const isEntity = (AC.config.operatingMode === "entity");
+        const ecTemplate = getECConfigureCardTemplate();
+        banTitle(ecTemplate.title);
+
+        // In entity mode: allow construction. In classic mode: retrieve only if it exists.
+        const ecCard = getSingletonCard(isEntity, ecTemplate);
+        if (!ecCard) return;
+
+        // Auto-detect model preset if enabled and not already customized
+        if (isEntity && AC.config.ECAutoPreset && (AC.config.ECPreset !== "custom") && (typeof info === "object") && info?.storyModel?.name) {
+            const detected = detectModelTier();
+            if (detected !== AC.config.ECPreset) {
+                AC.config.ECPreset = detected;
+                if (EC_PRESETS[detected]) {
+                    AC.config.generationPrompt = EC_PRESETS[detected];
+                }
+                ecCard.entry = getECConfigureCardEntry();
+                ecCard.description = getECConfigureCardDescription();
+            }
+        }
+
+        // Pin companion card directly beneath master card if pinned
+        if (isEntity && AC.config.pinConfigureCard && (storyCards.length >= 2)) {
+            const masterTitle = getControlVariants().configure.title;
+            const masterIdx = storyCards.findIndex(c => c && c.title === masterTitle);
+            const ecIdx = storyCards.indexOf(ecCard);
+            if (masterIdx !== -1 && ecIdx !== -1 && ecIdx !== masterIdx + 1) {
+                storyCards.splice(ecIdx, 1);
+                storyCards.splice(masterIdx + 1, 0, ecCard);
+            }
+        }
+
+        // In Classic mode: non-destructive persistence check
+        if (!isEntity) {
+            if (ecCard.entry) {
+                const userSettings = extractSettings(ecCard.entry);
+                const statusVal = typeof userSettings.status === "string" ? userSettings.status.toLowerCase() : userSettings.status;
+                if (statusVal === "active" || statusVal === true) {
+                    applyModeSwitch("entity");
+                    return;
+                }
+                if (!/Status:\s*Inactive/i.test(ecCard.entry)) {
+                    ecCard.entry = ecCard.entry.replace(/(?:>\s*)?Status:\s*[^\n]+/i, "> Status: Inactive");
+                }
+            }
+            return;
+        }
+
+        // In Entity mode:
+        // Description check (user custom prompt)
+        if (ecCard.description && (ecCard.description !== getECConfigureCardDescription())) {
+            const descConfigs = ecCard.description.split(Words.delimiter).slice(1);
+            if (descConfigs.length > 0) {
+                const headerPattern = /^\s*>\s*AI prompt to generate new entity cards[^:]*:\s*/i;
+                const promptText = descConfigs[0].replace(headerPattern, "").trim();
+                if (promptText && (promptText !== AC.config.generationPrompt.trim())) {
+                    const matchedPreset = Object.keys(EC_PRESETS).find(k => EC_PRESETS[k].trim() === promptText);
+                    if (matchedPreset) {
+                        AC.config.ECPreset = matchedPreset;
+                        AC.config.generationPrompt = EC_PRESETS[matchedPreset];
+                        ecCard.entry = getECConfigureCardEntry();
+                    } else {
+                        AC.config.generationPrompt = promptText;
+                        if (AC.config.ECPreset !== "custom") {
+                            AC.config.ECPreset = "custom";
+                            notify("Template modified: Active Preset set to Custom");
+                            ecCard.entry = getECConfigureCardEntry();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Entry check (user settings)
+        if (ecCard.entry !== ecTemplate.entry) {
+            const settings = extractSettings(ecCard.entry);
+            const statusVal = typeof settings.status === "string" ? settings.status.toLowerCase() : settings.status;
+            if (statusVal === "inactive" || statusVal === false) {
+                applyModeSwitch("classic");
+                return;
+            }
+            if (settings.activepreset) {
+                const reqPreset = settings.activepreset.toLowerCase();
+                if (["standard", "lite", "authoring", "custom"].includes(reqPreset) && (reqPreset !== AC.config.ECPreset)) {
+                    AC.config.ECPreset = reqPreset;
+                    if (EC_PRESETS[reqPreset]) {
+                        AC.config.generationPrompt = EC_PRESETS[reqPreset];
+                    }
+                    notify("Entity Cards preset set to: " + reqPreset[0].toUpperCase() + reqPreset.slice(1));
+                }
+            }
+            if (typeof settings.autoselectpresetbymodel === "boolean") {
+                AC.config.ECAutoPreset = settings.autoselectpresetbymodel;
+            }
+            if (typeof settings.contextheader === "string") {
+                AC.config.ECContextHeader = settings.contextheader;
+            }
+            if (typeof settings.autotypestorycards === "boolean") {
+                AC.config.autoTypeCards = settings.autotypestorycards;
+            }
+            if (typeof settings.usecustomcontainer === "boolean") {
+                AC.config.SCContainerize = settings.usecustomcontainer;
+            }
+            if (typeof settings.containeropenstring === "string") {
+                AC.config.SCContainerOpen = settings.containeropenstring;
+            }
+            if (typeof settings.containerclosestring === "string") {
+                AC.config.SCContainerClose = settings.containerclosestring;
+            }
+            if (typeof settings.aibeginsentinel === "string") {
+                AC.config.SCContainerAIBeginSentinel = settings.aibeginsentinel;
+            }
+            if (typeof settings.aiendsentinel === "string") {
+                AC.config.SCContainerAIEndSentinel = settings.aiendsentinel;
+            }
+            if (typeof settings.trimcardphrasefrags === "boolean") {
+                AC.config.trimPhraseFragCards = settings.trimcardphrasefrags;
+            }
+            if (typeof settings.trimcardquotefrags === "boolean") {
+                AC.config.trimQuoteFragCards = settings.trimcardquotefrags;
+            }
+            if (typeof settings.trimcarddelimiterfrags === "boolean") {
+                AC.config.trimDelimiterFragCards = settings.trimcarddelimiterfrags;
+            }
+            if (typeof settings.stripcardasterisks === "boolean") {
+                AC.config.stripAsterisksCards = settings.stripcardasterisks;
+            }
+            if (typeof settings.prettifycardemdashes === "boolean") {
+                AC.config.prettifyEmDashesCards = settings.prettifycardemdashes;
+            }
+            if (typeof settings.lograwaientrydata === "boolean") {
+                AC.config.showDebugDataSCRawAIEntry = settings.lograwaientrydata;
+            }
+            if (typeof settings.lograwaimemorydata === "boolean") {
+                AC.config.showDebugDataSCRawAIMemory = settings.lograwaimemorydata;
+            }
+            ecCard.entry = getECConfigureCardEntry();
+            ecCard.description = getECConfigureCardDescription();
+        }
+    }
     // Returns the template-specified singleton card (or secondary varient) after:
     // 1) Erasing all inferior duplicates
     // 2) Repairing damaged titles and keys
@@ -5687,29 +6093,23 @@ else {
                 logEvent("/EC");
             } else if (/^mode\s+(entity|classic)/i.test(requestTitle)) {
                 const requestedMode = requestTitle.match(/^mode\s+(entity|classic)/i)[1].toLowerCase();
-                AC.config.operatingMode = requestedMode;
-                const isNowEntity = (requestedMode === "entity");
-                AC.config.SCContainerize = isNowEntity;
-                AC.config.rawAIPromptMode = isNowEntity;
-                AC.config.rawAIResponseMode = isNowEntity;
-                AC.config.autoTypeCards = isNowEntity;
-                AC.config.bulletedListMode = !isNowEntity;
-                AC.config.generationPrompt = isNowEntity ? DEFAULT_EC_CARD_GENERATION_PROMPT : DEFAULT_AC_CARD_GENERATION_PROMPT;
-                AC.config.defaultEntryLimit = validateEntryLimit(isNowEntity ? DEFAULT_EC_GENERATED_ENTRY_LIMIT : DEFAULT_GENERATED_ENTRY_LIMIT);
-                const cfgTitle = getControlVariants().configure.title;
-                const cfgCard = Internal.getCard(card => card.title === cfgTitle);
-                if (cfgCard) {
-                    cfgCard.entry = cfgCard.entry.replace(
-                        /(?:\*EC\s+)?Operating Mode:\s*[^\n]+/i,
-                        "*EC Operating Mode: " + (isNowEntity ? "Entity Cards" : "Classic Auto-Cards")
-                    );
-                    cfgCard.entry = cfgCard.entry.replace(
-                        /Maximum entry length for new cards:\s*\d+/i,
-                        "Maximum entry length for new cards: " + AC.config.defaultEntryLimit
-                    );
-                }
-                result += "/EC mode -> Switched to " + (isNowEntity ? "Entity Cards" : "Classic Auto-Cards") + "\n\n";
+                applyModeSwitch(requestedMode);
+                result += "/EC mode -> Switched to " + (requestedMode === "entity" ? "Entity Cards" : "Classic Auto-Cards") + "\n\n";
                 logEvent("/EC mode: " + requestedMode);
+            } else if (/^preset\s+(standard|lite|authoring|custom)/i.test(requestTitle)) {
+                const reqPreset = requestTitle.match(/^preset\s+(standard|lite|authoring|custom)/i)[1].toLowerCase();
+                AC.config.ECPreset = reqPreset;
+                if (EC_PRESETS[reqPreset]) {
+                    AC.config.generationPrompt = EC_PRESETS[reqPreset];
+                }
+                const ecTitle = getControlVariants().configureEC.title;
+                const ecCard = Internal.getCard(card => card && card.title === ecTitle);
+                if (ecCard) {
+                    ecCard.entry = getECConfigureCardEntry();
+                    ecCard.description = getECConfigureCardDescription();
+                }
+                result += "/EC preset -> Set to " + (reqPreset[0].toUpperCase() + reqPreset.slice(1)) + "\n\n";
+                logEvent("/EC preset: " + reqPreset);
             } else if (/^header\s+/i.test(requestTitle)) {
                 const newHeader = requestTitle.replace(/^header\s+/i, "").trim();
                 AC.config.ECContextHeader = newHeader;
@@ -6457,6 +6857,8 @@ else {
                 controlVariants.enable.keys,
                 controlVariants.configure.title.replace("\n", ""),
                 controlVariants.configure.keys,
+                controlVariants.configureEC.title.replace("\n", ""),
+                controlVariants.configureEC.keys,
                 dataVariants.debug.title,
                 dataVariants.debug.keys,
                 dataVariants.critical.title,
@@ -6614,6 +7016,10 @@ else {
             configure: O.f({
                 title: "Configure \nAuto-Cards",
                 keys: "Edit the entry above to adjust your story card automation settings",
+            }),
+            configureEC: O.f({
+                title: "Configure \nEntity Cards",
+                keys: "Edit the entry above to adjust your Entity Cards settings and templates",
             }),
             enable: O.f({
                 title: "Edit to enable \nAuto-Cards",

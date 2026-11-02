@@ -1,0 +1,102 @@
+
+Wayfarer small 2:
+
+[ai, generate a NER entry in yaml format for Tokyo City with keys: entity, type, category, atmosphere, key_locations, connections, description] 
+
+'''yaml
+entity: Tokyo City
+type: location
+category: metropolitan hub
+atmosphere: dense, electric, neon-soaked, relentless energy, quiet pockets of stillness amid chaos
+keylocations:
+- Shibuya Crossing: iconic pedestrian scramble, overwhelming crowds, sensory overload
+- Shinjuku Golden Gai: narrow alleys packed with tiny bars, intimate drinking culture
+- Akihabara: electronics and anime district, bright lights, obsessive subcultures
+- Meiji Shrine: serene forest sanctuary, stark contrast to surrounding urban density
+- Roppongi: nightlife district, expat bars, clubs, late-night revelry
+connections:
+- Alex Mercer: former medical student, potential residency opportunities abroad
+- Mia Carter: art world connections, gallery exchanges, international exhibitions
+- Tessa Hart: aspirational travel destination, shared dream potential
+description:
+A sprawling metropolis where ancient traditions and cutting-edge modernity
+coexist in dense, vertical layers. The city pulses with a rhythm that never
+fully slows, its train lines threading through neon districts and quiet
+residential blocks alike. The food culture is obsessive, the bar culture is
+intimate, and the social codes are complex. For travelers, it can feel
+both exhilarating and deeply alienating.
+
+---------------------------------------------------------------------
+
+Gemma 4 31B:
+[ai, generate a NER entry in yaml format for Tokyo City with keys: entity, type, category, atmosphere, key_locations, connections, description]
+
+'''yaml
+entity: Tokyo City
+type: Metropolis
+category: Urban Center
+atmosphere: A hyper-modern juxtaposition of neon-lit chaos and serene, hidden tradition; high-energy, meticulously organized, and densely populated.
+keylocations:
+- Shibuya Crossing
+- Shinjuku Gyoen National Garden
+- Akihabara Electric Town
+- Senso-ji Temple
+- Tokyo Tower
+connections:
+- Yamanote Line
+
+- Imperial Palace
+
+- Global Financial Hubs
+
+description: The sprawling capital of Japan, characterized by its futuristic skyline, cutting-edge technology, and an intricate network of narrow alleyways housing ancient shrines and izakayas.
+
+---------------------------------------------------------------------
+
+GLM:
+[ai, generate a NER entry in yaml format for Tokyo City with keys: entity, type, category, atmosphere, key_locations, connections, description]
+
+'''yaml
+entity: Tokyo City
+type: metropolis
+category: urban setting
+atmosphere: neon-lit, dense, overwhelming, electric, anonymous, intimate in small spaces
+keylocations:
+- Shinjuku station
+- Golden Gai alley bars
+- Yoyogi Park
+- Shibuya crossing
+- Roppongi nightlife district
+connections:
+- potential future setting for story relocation
+- contrast setting to rainy Seattle
+
+// Notice that this provided nesting.
+---------------------------------------------------------------------
+
+GLM:
+[ai, generate a NER entry in yaml format for Tokyo City with keys: entity, type, category, atmosphere, key_locations, connections, description]
+
+
+'''yaml
+entity: Tokyo City
+type: location
+category: metropolitan hub
+atmosphere: dense, electric, neon-soaked, relentless energy, quiet pockets of stillness amid chaos
+keylocations:
+- Shibuya Crossing: iconic pedestrian scramble, overwhelming crowds, sensory overload
+- Shinjuku Golden Gai: narrow alleys packed with tiny bars, intimate drinking culture
+- Akihabara: electronics and anime district, bright lights, obsessive subcultures
+- Meiji Shrine: serene forest sanctuary, stark contrast to surrounding urban density
+- Roppongi: nightlife district, expat bars, clubs, late-night revelry
+connections:
+- Alex Mercer: former medical student, potential residency opportunities abroad
+- Mia Carter: art world connections, gallery exchanges, international exhibitions
+- Tessa Hart: aspirational travel destination, shared dream potential
+description:
+A sprawling metropolis where ancient traditions and cutting-edge modernity
+coexist in dense, vertical layers. The city pulses with a rhythm that never
+fully slows, its train lines threading through neon districts and quiet
+residential blocks alike. The food culture is obsessive, the bar culture is
+intimate, and the social codes are complex. For travelers, it can feel
+both exhilarating and deeply alienating.

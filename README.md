@@ -23,13 +23,20 @@ You can switch between **Entity Cards** mode and **Classic Auto-Cards** mode at 
 
 ## What Entity Cards Adds to Auto-Cards
 
-* **Named Entity Recognition (NER):** Detects entities and categorizes them into 5 distinct types: `Person`, `Organization`, `Location`, `Event`, or `Thing`.
-* **JellyFish (JFSH) AI Prompting:** A structured pseudo-language template designed for high information density, including MBTI personality profiles, character archetypes, physical descriptions, and concise traits.
+* **Two-Card Clean Architecture:** Splits configuration into two purposeful cards:
+  * **"Configure Auto-Cards" (Master):** Engine controls, cooldowns, turn delays, memory limits, and operating mode switcher (~18 lines).
+  * **"Configure Entity Cards" (Companion):** Entity status, active presets, container sentinels, and live editable template blocks.
+* **Card Persistence Guarantee:** When switched to Classic Auto-Cards mode, `Configure Entity Cards` is **never deleted**. It is safely preserved and marked `> Status: Inactive`. Switching back restores it seamlessly.
+* **Named Entity Recognition (NER) Schemas:** Calibrated YAML schemas for 5 entity categories (`Person`, `Location`, `Organization`, `Thing`, and `Event`), designed to fit neatly under AI Dungeon's default **100-token slider** in a single turn.
+* **Model Awareness & Presets:** Automatically detects your active AI Dungeon model (`info.storyModel.name`) and selects the optimal schema tier:
+  * **Standard (Default):** Balanced 5-type YAML schemas for mid-to-large models (DeepSeek, GLM, Gemma, Hearthfire, Equinox).
+  * **Lite:** Ultra-compact schemas (~380 chars) for lightweight models (Fable, Muse, Wayfarer Small).
+  * **Authoring:** Narrative-driven keys (`Role:`, `Secrets:`, `Scene_Dynamics:`, `Motives:`) for scenario writers.
+  * **Custom:** Automatically activated if you edit any template block inside `Configure Entity Cards`.
+* **Resilient Parsing & Code Fence Stripping:** Automatically strips markdown code fences (```` ```yaml ````, ```` ``` ````, `'''yaml`, `'''`) and sentinel markers, normalizing em-dash bullets (`—` / `–`) into clean, readable story cards.
 * **Automatic Story Card Typing:** Automatically extracts the entity category and assigns AI Dungeon's native story card `type` property (e.g., categorizing as "Person" instead of a generic tag).
 * **Story Card Encapsulation / Containers:** Optional `{ Entity: ... }` boundary wrappers with `ENTITY_BEGIN` and `ENTITY_END` sentinels to keep story card formatting clean and contained.
 * **Dynamic Context Header:** Automatically replaces `"World Lore:"` with a customizable header (default `"Named Entities (NER):"`) during context building, without needing manual edits to your `Context` script tab.
-* **One-Click Mode Switcher:** Seamlessly toggle between `Entity Cards` and `Classic Auto-Cards` at any time—either from the in-game *"Configure"* story card or via the `/ec mode` command.
-* **Smart Fragment Trimming:** Intelligent end-of-generation cleanup that detects abbreviations (`Mr.`, `Dr.`, `U.S.`) to avoid false phrase cuts, while stripping dangling sentences and unclosed quotes/brackets.
 * **Dual Script & Command Aliases:** Call either `EntityCards(...)` or `AutoCards(...)` in your scenario scripts, and use either `/ec` or `/ac` in-game commands.
 
 ---
@@ -41,8 +48,12 @@ You can use either `/ec` or `/ac` in the AI Dungeon action input bar:
 | Command | Description |
 |---|---|
 | `/ec` | Triggers immediate card generation if valid titles exist in recent turns |
-| `/ec mode entity` | Switches the engine to **Entity Cards** mode (NER, JFSH prompt, containerization) |
+| `/ec mode entity` | Switches the engine to **Entity Cards** mode (NER, YAML schemas, companion card) |
 | `/ec mode classic` | Switches the engine to **Classic Auto-Cards** mode (prose prompt, bulleted lists) |
+| `/ec preset standard` | Activates the **Standard** balanced 5-type YAML preset |
+| `/ec preset lite` | Activates the ultra-compact **Lite** preset (ideal for 8B models) |
+| `/ec preset authoring` | Activates the narrative **Authoring** preset (secrets, motives, scene dynamics) |
+| `/ec preset custom` | Activates the **Custom** preset using your live edited templates |
 | `/ec header <text>` | Sets a custom context header (e.g., `/ec header Codex Entities:`) |
 | `/ec <Title>` | Manually directs card generation for a specific title |
 | `/ec <Title> / {Details}` | Generates a card for a title with additional guidance details |
@@ -53,30 +64,26 @@ You can use either `/ec` or `/ac` in the AI Dungeon action input bar:
 
 ---
 
-## In-Game Configuration Card (`*EC` Options)
+## Two-Card Configuration Architecture
 
-Once enabled in your adventure, a pinned story card titled **"Configure Auto-Cards"** allows you to customize settings in real time. Options labeled with **`*EC`** are specific to Entity Cards features:
+Configuration is cleanly partitioned between two story cards:
 
-| Option | Default | Description |
-|---|---|---|
-| `*EC Operating Mode:` | `"Entity Cards"` | Toggle between `"Entity Cards"` and `"Classic Auto-Cards"` |
-| `*EC Context Header:` | `"Named Entities (NER):"` | Custom header replacing `"World Lore:"` in context |
-| `*EC Raw AI Prompt Mode:` | `true` | Preserves structured JellyFish prompt without prose conversion |
-| `*EC Raw AI Response Mode:` | `true` | Preserves archetype template formatting without forced bulleting |
-| `*EC Auto-Type Story Cards:` | `true` | Automatically assigns native story card `type` (`Person`, `Location`, etc.) |
-| `*EC Use custom story card container:` | `true` | Wraps entity cards inside `{ Entity: ... }` blocks |
-| `*EC Custom container open string:` | `"{ Entity: "` | Opening string for story card containers |
-| `*EC Custom container close string:` | `"\n}"` | Closing string for story card containers |
-| `*EC Custom container AI begin sentinel:` | `"ENTITY_BEGIN"` | Boundary marker returned by AI |
-| `*EC Custom container AI end sentinel:` | `"ENTITY_END"` | Boundary marker returned by AI |
-| `*EC Trim card phrase frag:` | `true` | Smart fragment cleanup preventing cut-offs on abbreviations |
-| `*EC Trim card quote frag:` | `true` | Strips trailing unclosed quotes and parentheses |
-| `*EC Strip card asterisks:` | `true` | Removes markdown asterisks from generated card entries |
-| `*EC Prettify card em dashes:` | `true` | Standardizes hyphens to clean em dashes |
-| `*EC Log raw AI entry data:` | `false` | Debug log for raw card generation text |
-| `*EC Log raw AI memory data:` | `false` | Debug log for raw card memory summarization |
+### 1. "Configure Auto-Cards" (Master Card)
+Pinned near the top of your story cards list, this compact card manages core engine parameters:
+* `> Operating Mode:` Toggle between `Entity Cards` and `Classic Auto-Cards`
+* `> Minimum turns cooldown for new cards:` Story progression turns between generations (default `28`)
+* `> Maximum entry length for new cards:` Max character length (`700` in Entity mode, `600` in Classic mode)
+* `> Pin this config card near the top:` Keeps configuration cards accessible
+* `> Generate memories for new cards:` Memory update monitoring (`true`/`false`)
+* `> Exclude all-caps from title detection:` Prevents false positives from capitalized UI text
 
-*(Note: Settings parsing is fully flexible and case/prefix-tolerant, so editing options with or without the `*EC` label will work identically.)*
+### 2. "Configure Entity Cards" (Companion Card)
+Dedicated to Named Entity Recognition and prompt customization:
+* `> Status:` `Active` (when in Entity Cards mode) or `Inactive` (preserved when in Classic mode)
+* `> Active Preset:` `Standard`, `Lite`, `Authoring`, or `Custom`
+* `> Auto-select preset by model:` Automatically adapts schema complexity based on your active AI Dungeon model
+* `> Context Header:` Custom header replacing `"World Lore:"` in context (default: `"Named Entities (NER):"`)
+* `> Live Editable Template Blocks:` Edit the card's description to customize prompt schemas directly in-game; editing automatically switches the preset to **Custom**!
 
 > [!TIP]
 > **AI Dungeon Response Length:**  
