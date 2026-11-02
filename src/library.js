@@ -1312,7 +1312,7 @@ description: {1 concise sentence narrative summary}
                         }
                         card.description = "{title:}";
                         Internal.getUsedTitles(true);
-                        return card.entry.startsWith("{title: ");
+                        return Internal.SCContainerUnwrap(card.entry).startsWith("{title: ");
                     } else if (!checkAuto()) {
                         return false;
                     }
@@ -3009,21 +3009,22 @@ description: {1 concise sentence narrative summary}
             let isRemembering = false;
             for (const card of storyCards) {
                 // Iterate over each card to handle pending card events and forenames/surnames
+                const unwrappedEntry = Internal.SCContainerUnwrap(card.entry);
                 const titleHeaderMatcher = /^{title: \s*([\s\S]*?)\s*}/;
                 let breakForCompression = isPendingCompression();
                 if (breakForCompression) {
                     break;
-                } else if (!card.entry.startsWith("{title: ")) {
+                } else if (!unwrappedEntry.startsWith("{title: ")) {
                     continue;
                 } else if (exceedsMemoryLimit()) {
-                    const titleHeaderMatch = card.entry.match(titleHeaderMatcher);
+                    const titleHeaderMatch = unwrappedEntry.match(titleHeaderMatcher);
                     if (titleHeaderMatch && isAuto(titleHeaderMatch[1])) {
                         prepareMemoryCompression(titleHeaderMatch[1].toLowerCase());
                         break;
                     }
                 }
                 // Handle card events
-                const lowerEntry = card.entry.toLowerCase();
+                const lowerEntry = unwrappedEntry.toLowerCase();
                 for (const titleKey of cardEvents.keys()) {
                     if (!lowerEntry.startsWith("{title: " + titleKey + "}")) {
                         continue;
@@ -3094,7 +3095,7 @@ description: {1 concise sentence narrative summary}
                     break;
                 }
                 // Simplify auto-card titles which contain an obvious surname
-                const titleHeaderMatch = card.entry.match(titleHeaderMatcher);
+                const titleHeaderMatch = unwrappedEntry.match(titleHeaderMatcher);
                 if (!titleHeaderMatch) {
                     continue;
                 }
@@ -5013,7 +5014,7 @@ description: {1 concise sentence narrative summary}
             const cards = [];
             Internal.getUsedTitles(true);
             for (const card of storyCards) {
-                if (card.entry.startsWith("{title: ")) {
+                if (Internal.SCContainerUnwrap(card.entry).startsWith("{title: ")) {
                     cards.push(card);
                 }
             }
@@ -6143,12 +6144,12 @@ description: {1 concise sentence narrative summary}
                     Internal.getUsedTitles(true);
                     const titleMatchPattern = /^{title: ([\s\S]*?)}/;
                     redo.push(...Internal.getCard(card => (
-                        titleMatchPattern.test(card.entry)
+                        titleMatchPattern.test(Internal.SCContainerUnwrap(card.entry))
                         && /{updates: (?:true|false), limit: \d+}/.test(card.description)
                     ), true));
                     let count = 0;
                     for (const card of redo) {
-                        const titleMatch = card.entry.match(titleMatchPattern);  
+                        const titleMatch = Internal.SCContainerUnwrap(card.entry).match(titleMatchPattern);  
                         if (titleMatch && Internal.redoCard(O.f({title: titleMatch[1]}), true, "")) {
                             count++;
                         }
