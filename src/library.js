@@ -5,7 +5,7 @@
 /*
 Auto-Cards / Entity Cards
 Originally made by LewdLeah on May 21, 2025
-Forked and expanded as "Entity Cards" by Randy Viosca
+Forked and expanded as "Entity Cards" by Randy Viosca (@Random_Variable on AI Dungeon)
 - Named Entity Recognition (NER) and automatic story card typing (Person, Organization, Location, Event, Thing)
 - JellyFish (JFSH) structured AI pseudo-language generation prompts
 - Story card containerization / encapsulation and sentinels

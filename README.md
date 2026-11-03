@@ -9,7 +9,7 @@
 > **Original Creator:** [LewdLeah](https://play.aidungeon.com/profile/LewdLeah) ([LewdLeah/Auto-Cards](https://github.com/LewdLeah/Auto-Cards))  
 > All core background automation, turn monitoring, memory summarization and compression, title detection algorithms, and scenario script architecture were designed and built by LewdLeah. Please check out and star the [original Auto-Cards repository](https://github.com/LewdLeah/Auto-Cards)! ❤️
 >
-> **Entity Cards Fork:** Developed by Randy Viosca to extend Auto-Cards with structured Named Entity Recognition (NER), story card containerization, typed card auto-detection, and flexible prompt/response controls.
+> **Entity Cards Fork:** Developed by Randy Viosca ([@Random_Variable](https://play.aidungeon.com/profile/Random_Variable)) to extend Auto-Cards with structured Named Entity Recognition (NER), story card containerization, typed card auto-detection, and flexible prompt/response controls.
 
 ---
 
@@ -163,3 +163,8 @@ Entity Cards is open-source and free to use in your own scenarios or scripts. Ge
 * **LewdLeah's Profile:** [play.aidungeon.com/profile/LewdLeah](https://play.aidungeon.com/profile/LewdLeah)
 * **Upstream Auto-Cards Repo:** [github.com/LewdLeah/Auto-Cards](https://github.com/LewdLeah/Auto-Cards)
 * **Official AI Dungeon Discord:** [discord.gg/MXNqpSbuZT](https://discord.gg/MXNqpSbuZT)
+
+### Entity Cards by Randy Viosca
+* **Random_Variable's AID Profile:** [play.aidungeon.com/profile/Random_Variable](https://play.aidungeon.com/profile/Random_Variable)
+* **Entity Cards Repo:** [github.com/viosca/Entity-Cards](https://github.com/viosca/Entity-Cards)
+* **Inner Entity Repo:** [github.com/viosca/Inner-Entity](https://github.com/viosca/Inner-Entity)
