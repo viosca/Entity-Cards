@@ -1122,6 +1122,10 @@ description: {1 concise sentence narrative summary}
             }
             CODOMAIN.initialize(null);
         } else {
+            // Synchronize with external Inner Self / Inner Entity if installed
+            state.InnerSelf ??= {};
+            state.InnerSelf.AC ??= {};
+            state.InnerSelf.AC.forced = true;
             // AutoCards was (probably) called without arguments, return an external API to allow other script creators to programmatically govern the behavior of Auto-Cards from elsewhere within their own scripts
             CODOMAIN.initialize({API: O.f(Object.fromEntries(Object.entries({
                 // Call these API functions like so: AutoCards().API.nameOfFunction(argumentsOfFunction)
@@ -2694,6 +2698,8 @@ description: {1 concise sentence narrative summary}
                             continue;
                         }
                         const words = (Internal.prettifyEmDashes(action.text)
+                            // Inner Self / Inner Entity visual indicator prefix
+                            .replace(/\s*[\u200B-\u200D][\s\u200B-\u200D]*/g, " ")
                             // Nuh uh
                             .replace(/[“”]/g, "\"").replace(/[‘’]/g, "'").replaceAll("´", "`")
                             .replaceAll("。", ".").replaceAll("？", "?").replaceAll("！", "!")
@@ -3355,12 +3361,17 @@ description: {1 concise sentence narrative summary}
                     .replaceAll("%@MEM@%}", " }")
                 );
             }
-            if (isGenerating) {
-                // Likewise for the card entry generation delimiter
-                context = context.replaceAll("%@GEN@%", "");
-            } else if (isCompressing) {
-                // Or the (mutually exclusive) card memory compression delimiter
-                context = context.replaceAll("%@COM@%", "");
+            if (isGenerating || isCompressing) {
+                state.InnerSelf ??= {};
+                state.InnerSelf.AC ??= {};
+                state.InnerSelf.AC.event = true;
+                if (isGenerating) {
+                    // Likewise for the card entry generation delimiter
+                    context = context.replaceAll("%@GEN@%", "");
+                } else {
+                    // Or the (mutually exclusive) card memory compression delimiter
+                    context = context.replaceAll("%@COM@%", "");
+                }
             }
             if ((AC.config.operatingMode === "entity") && (AC.config.ECContextHeader)) {
                 context = context.replace(/^World Lore:$/m, AC.config.ECContextHeader);
@@ -5074,10 +5085,18 @@ description: {1 concise sentence narrative summary}
             AC.database.titles.used = ["%@%"];
             for (const card of storyCards) {
                 // Perform some common-sense maintenance while we're here
-                card.type = card.type.trim();
-                card.title = card.title.trim();
+                const coerce = (str) => (typeof str === "string") ? str : "";
+                card.keys = coerce(card.keys);
+                if (card.keys.includes("\"agent\"") || card.keys.includes("aidungeon")) {
+                    if (isExternal) {
+                        O.s(card);
+                    }
+                    continue;
+                }
+                card.type = coerce(card.type).trim();
+                card.title = coerce(card.title).trim();
                 // card.keys should be left as-is
-                card.description = card.description.trim();
+                card.description = coerce(card.description).trim();
                 if (isExternal) {
                     O.s(card);
                 } else if (!shouldProceed()) {
@@ -6711,6 +6730,9 @@ description: {1 concise sentence narrative summary}
             return end();
         }
         title = (title
+            // Inner Self / Inner Entity visual indicator prefix
+            .slice(title.indexOf("\u200B") + 1)
+            .replace(/[\u200B-\u200D]+/g, "")
             // Begone!
             .replace(/[–。？！´“”؟،«»¿¡„“…§，、\*_~><\(\)\[\]{}#"`:!—;\.\?,\s\\]/g, " ")
             .replace(/[‘’]/g, "'").replace(/\s+'/g, " ")
