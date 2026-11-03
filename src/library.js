@@ -27,27 +27,27 @@ function AutoCards(inHook, inText, inStop) {
      * 1. CORE ENGINE SETTINGS
      * ========================================================================= */
     // Is Auto-Cards / Entity Cards already enabled when the adventure begins?
-    const DEFAULT_DO_AC = false
+    let DEFAULT_DO_AC = false
     // (true or false)
 
     // Choose operating mode: "entity" (Entity Cards) or "classic" (Classic Auto-Cards)
-    const DEFAULT_OPERATING_MODE = "entity"
+    let DEFAULT_OPERATING_MODE = "entity"
     // ("entity" or "classic")
 
     // Minimum number of turns in between automatic card generation events?
-    const DEFAULT_CARD_CREATION_COOLDOWN = 28
+    let DEFAULT_CARD_CREATION_COOLDOWN = 28
     // (0 to 9999)
 
     // Pin the "Configure" story card at the top of the player's story cards list?
-    const DEFAULT_PIN_CONFIGURE_CARD = true
+    let DEFAULT_PIN_CONFIGURE_CARD = true
     // (true or false)
 
     // Allow manual player commands (/ec or /ac) to bypass common entity & banned title filters?
-    const DEFAULT_MANUAL_BYPASS_TITLE_FILTERS = true
+    let DEFAULT_MANUAL_BYPASS_TITLE_FILTERS = true
     // (true or false)
 
     // Filter common entities (real-world cities, countries, planets) from background auto-detection?
-    const DEFAULT_FILTER_COMMON_ENTITIES = true
+    let DEFAULT_FILTER_COMMON_ENTITIES = true
     // (true or false)
 
 
@@ -55,47 +55,47 @@ function AutoCards(inHook, inText, inStop) {
      * 2. ENTITY CARDS (*EC) UNIQUE SETTINGS (Active in "entity" mode)
      * ========================================================================= */
     // [*EC] Maximum allowed length for newly generated entity cards in EC mode (200 to 2000)
-    const DEFAULT_EC_GENERATED_ENTRY_LIMIT = 700
+    let DEFAULT_EC_GENERATED_ENTRY_LIMIT = 700
 
     // [*EC] Active template preset for newly generated entities: "standard", "lite", "authoring", or "custom"
-    const DEFAULT_EC_PRESET = "standard"
+    let DEFAULT_EC_PRESET = "standard"
 
     // [*EC] Automatically select preset based on detected AI Dungeon story model?
-    const DEFAULT_EC_AUTO_PRESET = true
+    let DEFAULT_EC_AUTO_PRESET = true
 
     // [*EC] Replacement string for "World Lore:" header in context (set to "" to leave unchanged)
-    const DEFAULT_EC_CONTEXT_HEADER = "Named Entities (NER):"
+    let DEFAULT_EC_CONTEXT_HEADER = "Named Entities (NER):"
 
     // [*EC] Encapsulate / wrap entity story cards in containers?
-    const DEFAULT_EC_SC_CONTAINERIZE = true
+    let DEFAULT_EC_SC_CONTAINERIZE = true
     // (true or false)
 
     // [*EC] Opening and closing container wrapper strings
-    const DEFAULT_EC_SC_CONTAINER_OPEN = "{ Entity: "
-    const DEFAULT_EC_SC_CONTAINER_CLOSE = "\n}"
+    let DEFAULT_EC_SC_CONTAINER_OPEN = "{ Entity: "
+    let DEFAULT_EC_SC_CONTAINER_CLOSE = "\n}"
 
     // [*EC] Sentinels returned by the AI to mark entry boundaries:
-    const DEFAULT_EC_SC_AI_BEGIN_SENTINEL = "ENTITY_BEGIN"
-    const DEFAULT_EC_SC_AI_END_SENTINEL = "ENTITY_END"
+    let DEFAULT_EC_SC_AI_BEGIN_SENTINEL = "ENTITY_BEGIN"
+    let DEFAULT_EC_SC_AI_END_SENTINEL = "ENTITY_END"
 
     // [*EC] Don't edit/modify the generation prompt sent to the AI (enables JellyFish code prompts)
-    const DEFAULT_EC_RAWAI_PROMPT_MODE = true
+    let DEFAULT_EC_RAWAI_PROMPT_MODE = true
 
     // [*EC] Don't edit/modify the AI response(s) (enables template formatting without forced bulleting)
-    const DEFAULT_EC_RAWAI_RESPONSE_MODE = true
+    let DEFAULT_EC_RAWAI_RESPONSE_MODE = true
 
     // [*EC] Automatically parse entity type (- Type: Person, etc.) and assign story card type
-    const DEFAULT_EC_AUTO_TYPE_CARDS = true
+    let DEFAULT_EC_AUTO_TYPE_CARDS = true
 
     // [*EC] Smart phrase & delimiter fragment trimming for generated cards
-    const DEFAULT_EC_TRIM_PHRASE_FRAG_CARDS = true
-    const DEFAULT_EC_TRIM_DELIMITER_FRAG_CARDS = true
-    const DEFAULT_EC_STRIP_ASTERISKS_CARDS = true
-    const DEFAULT_EC_PRETTIFY_EMDASHES_CARDS = true
+    let DEFAULT_EC_TRIM_PHRASE_FRAG_CARDS = true
+    let DEFAULT_EC_TRIM_DELIMITER_FRAG_CARDS = true
+    let DEFAULT_EC_STRIP_ASTERISKS_CARDS = true
+    let DEFAULT_EC_PRETTIFY_EMDASHES_CARDS = true
 
     // [*EC] Display the card raw prompt and response for debugging?
-    const DEFAULT_EC_SHOW_DEBUG_RAWAI_ENTRY = false
-    const DEFAULT_EC_SHOW_DEBUG_RAWAI_MEMORY = false
+    let DEFAULT_EC_SHOW_DEBUG_RAWAI_ENTRY = false
+    let DEFAULT_EC_SHOW_DEBUG_RAWAI_MEMORY = false
 
     // [*EC] Preset dictionaries for Entity Cards prompts
     const EC_PRESETS = {
@@ -324,17 +324,17 @@ description: {1 concise sentence narrative summary}
     };
 
     // [*EC] AI prompt used to generate new story card in Entity (NER) JellyFish format
-    const DEFAULT_EC_CARD_GENERATION_PROMPT = EC_PRESETS.standard;
+    let DEFAULT_EC_CARD_GENERATION_PROMPT = EC_PRESETS.standard;
 
 
     /* =========================================================================
      * 3. CLASSIC AUTO-CARDS (AC) SETTINGS (Active in "classic" mode)
      * ========================================================================= */
     // Use a bulleted list format for newly generated card entries?
-    const DEFAULT_AC_USE_BULLETED_LIST_MODE = true
+    let DEFAULT_AC_USE_BULLETED_LIST_MODE = true
 
     // AI prompt used to generate new story card entries in classic mode
-    const DEFAULT_AC_CARD_GENERATION_PROMPT = prose(
+    let DEFAULT_AC_CARD_GENERATION_PROMPT = prose(
         "-----",
         "",
         "<SYSTEM>",
@@ -358,58 +358,58 @@ description: {1 concise sentence narrative summary}
      * 4. STORY OUTPUT TEXT CLEANUP (Optional for both modes)
      * ========================================================================= */
     // Trim incomplete phrases in normal story responses
-    const DEFAULT_TRIM_PHRASE_FRAG_STORY = false
+    let DEFAULT_TRIM_PHRASE_FRAG_STORY = false
     // Trim incomplete delimiters in normal story responses
-    const DEFAULT_TRIM_DELIMITER_FRAG_STORY = false
+    let DEFAULT_TRIM_DELIMITER_FRAG_STORY = false
     // Strip out asterisks in normal story responses
-    const DEFAULT_STRIP_ASTERISKS_STORY = false
+    let DEFAULT_STRIP_ASTERISKS_STORY = false
     // Prettify Em Dashes in normal story responses
-    const DEFAULT_PRETTIFY_EMDASHES_STORY = true
+    let DEFAULT_PRETTIFY_EMDASHES_STORY = true
     // Normalize whitespace in normal story responses
-    const DEFAULT_NORMALIZE_WHITESPACE_STORY = false
+    let DEFAULT_NORMALIZE_WHITESPACE_STORY = false
 
 
     /* =========================================================================
      * 5. GENERAL LIMITS & MEMORY SETTINGS
      * ========================================================================= */
     // Maximum allowed length for newly generated story card entries?
-    const DEFAULT_GENERATED_ENTRY_LIMIT = 600
+    let DEFAULT_GENERATED_ENTRY_LIMIT = 600
     // (200 to 2000)
 
     // Do newly generated cards have memory updates enabled by default?
-    const DEFAULT_NEW_CARDS_DO_MEMORY_UPDATES = true
+    let DEFAULT_NEW_CARDS_DO_MEMORY_UPDATES = true
     // (true or false)
 
     // Default character limit before the card's memory bank is summarized?
-    const DEFAULT_NEW_CARDS_MEMORY_LIMIT = 3200
+    let DEFAULT_NEW_CARDS_MEMORY_LIMIT = 3200
     // (1750 to 9900)
 
     // Approximately how much shorter should recently compressed memories be? (ratio = 10 * old / new)
-    const DEFAULT_MEMORY_COMPRESSION_RATIO = 25
+    let DEFAULT_MEMORY_COMPRESSION_RATIO = 25
     // (20 to 1250)
 
     // Ignore all-caps during title candidate detection?
-    const DEFAULT_IGNORE_ALL_CAPS_TITLES = true
+    let DEFAULT_IGNORE_ALL_CAPS_TITLES = true
     // (true or false)
 
     // Should player input actions (Do/Say/Story) be considered during title detection?
-    const DEFAULT_DETECT_TITLES_FROM_INPUTS = false
+    let DEFAULT_DETECT_TITLES_FROM_INPUTS = false
     // (true or false)
 
     // How many (minimum) actions in the past does Auto-Cards look for named entities?
-    const DEFAULT_MINIMUM_LOOK_BACK_DISTANCE = 5
+    let DEFAULT_MINIMUM_LOOK_BACK_DISTANCE = 5
     // (2 to 88)
 
     // Is Live Script Interface v2 enabled?
-    const DEFAULT_DO_LSI_V2 = false
+    let DEFAULT_DO_LSI_V2 = false
     // (true or false)
 
     // Should the "Debug Data" story card be visible?
-    const DEFAULT_SHOW_DEBUG_DATA = false
+    let DEFAULT_SHOW_DEBUG_DATA = false
     // (true or false)
 
     // AI prompt used to summarize a given story card's memory bank?
-    const DEFAULT_CARD_MEMORY_COMPRESSION_PROMPT = prose(
+    let DEFAULT_CARD_MEMORY_COMPRESSION_PROMPT = prose(
         "-----",
         "",
         "<SYSTEM>",
@@ -431,19 +431,28 @@ description: {1 concise sentence narrative summary}
     ); // (mimic this multi-line "text" format)
 
     // Titles banned from future card generation attempts?
-    const DEFAULT_BANNED_TITLES_LIST = (
+    let DEFAULT_BANNED_TITLES_LIST = (
         "North, East, South, West, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, January, February, March, April, May, June, July, August, September, October, November, December"
     ); // (mimic this comma-list "text" format)
 
     // Default story card "type" used by Auto-Cards? (does not matter)
-    const DEFAULT_CARD_TYPE = "class"
+    let DEFAULT_CARD_TYPE = "class"
     // ("text")
 
     // Should titles mentioned in the "opening" plot component be banned from future card generation by default?
-    const DEFAULT_BAN_TITLES_FROM_OPENING = true
+    let DEFAULT_BAN_TITLES_FROM_OPENING = true
     // (true or false)
 
-    //—————————————————————————————————————————————————————————————————————————————————
+    
+    // Main settings override local settings
+    if (typeof globalThis.MainSettings === "function") {
+        const _ovr = {};
+        new MainSettings("EntityCards", "AutoCards", "AC").merge(_ovr);
+        for (const [k, v] of Object.entries(_ovr)) {
+            try { eval(k + " = v;"); } catch (e) { /* ignore non-existent settings */ }
+        }
+    }
+//—————————————————————————————————————————————————————————————————————————————————
 
     /*
     Useful API functions for coders (otherwise ignore)
@@ -6717,7 +6726,7 @@ description: {1 concise sentence narrative summary}
         ) {
             const pair = memoized.get(input);
             if (pair !== undefined) {
-                if (50000 < memoized.size) {
+                if (30000 < memoized.size) {
                     memoized.delete(input);
                     memoized.set(input, pair);
                 }
@@ -7236,6 +7245,12 @@ description: {1 concise sentence narrative summary}
     } else {
         return codomain;
     }
-} AutoCards(null); const EntityCards = AutoCards; try { globalThis.EntityCards = AutoCards; } catch (_) {} function isolateLSIv2(code, log, text, stop) { const console = Object.freeze({log}); try { eval(code); return [null, text, stop]; } catch (error) { return [error, text, stop]; } }
+}
+if (typeof globalThis.InnerSelf !== "function" && typeof globalThis.InnerEntity !== "function") {
+    AutoCards(null);
+}
+const EntityCards = AutoCards;
+try { globalThis.EntityCards = AutoCards; } catch (_) {}
+function isolateLSIv2(code, log, text, stop) { const console = Object.freeze({log}); try { eval(code); return [null, text, stop]; } catch (error) { return [error, text, stop]; } }
 
 // Your other library scripts go here
