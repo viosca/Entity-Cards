@@ -907,6 +907,7 @@ description: {1 concise sentence narrative summary}
     const Words = hoistWords();
     const StringsHashed = hoistStringsHashed();
     const Internal = hoistInternal();
+    const EC_OC_CARD_TITLE = "\uD83D\uDDC2\uFE0F Entity Cards Task — do not edit";
     // AutoCards has an explicitly immutable domain: HOOK, TEXT, and STOP
     const HOOK = inHook;
     const TEXT = ((typeof inText === "string") && inText) || "\n";
@@ -1122,6 +1123,9 @@ description: {1 concise sentence narrative summary}
     O.f(AC.database);
     O.s(AC.database.titles);
     O.s(AC.database.memories);
+    if (typeof info?.useCacheEfficient === "boolean") {
+        state.EC_useCacheEfficient = info.useCacheEfficient;
+    }
     if (!HOOK) {
         globalThis.stop ??= false;
         AC.signal.maxChars = Math.abs(info?.maxChars || AC.signal.maxChars);
@@ -1134,9 +1138,9 @@ description: {1 concise sentence narrative summary}
                 text = (text
                     // Hide the guide
                     .replace(/\s*>>>\s*Detailed\s*Guide\s*:[\s\S]*?<<<\s*/gi, "\n\n")
-                    // Excise all /AC command messages
+                    // Excise all /AC and /EC command messages
                     .replace(/\s*>>>\s*Auto-Cards\s*has\s*been\s*enabled!\s*<<<\s*/gi, " ")
-                    .replace(/^.*\/\s*A\s*C.*$/gmi, "%@%")
+                    .replace(/^.*\/\s*(?:A|E)\s*C.*$/gmi, "%@%")
                     .replace(/\s*%@%\s*/g, " ")
                     // Consolidate all consecutive continue messages into placeholder substrings
                     .replace(/(?:(?:\s*>>>\s*please\s*select\s*"continue"\s*\([\s\S]*?\)\s*<<<\s*)+)/gi, message => {
@@ -1690,6 +1694,7 @@ description: {1 concise sentence narrative summary}
         case "context": {
             // AutoCards was called within the context modifier
             advanceChronometer();
+            deactivateOCTaskCard();
             if ((AC.config.operatingMode === "entity") && (AC.config.ECContextHeader)) {
                 TEXT = TEXT.replace(/^World Lore:$/m, AC.config.ECContextHeader);
             }
@@ -2308,6 +2313,19 @@ description: {1 concise sentence narrative summary}
             } else {
                 CODOMAIN.initialize(TEXT);
             }
+            // Pre-stage Optimize Context task card prior to context assembly when a generation is pending
+            if (wasCacheEfficient()) {
+                if ((AC.chronometer.postpone <= 0) && (isPendingGeneration() || isAwaitingGeneration())) {
+                    const stagedWorkpiece = isPendingGeneration() ? AC.generation.workpiece : AC.generation.pending[0];
+                    if (stagedWorkpiece && stagedWorkpiece.title) {
+                        writeOCTaskCard(buildOCGenerationCardBody(stagedWorkpiece), stagedWorkpiece.title, TEXT);
+                    }
+                } else if (!isPendingCompression()) {
+                    deactivateOCTaskCard();
+                }
+            } else {
+                deactivateOCTaskCard();
+            }
             break; }
         case "context": {
             // AutoCards was called within the context modifier
@@ -2732,11 +2750,13 @@ description: {1 concise sentence narrative summary}
 
             }
             if (AC.signal.forceToggle === false) {
+                deactivateOCTaskCard();
                 disableAutoCards();
                 break;
             }
             AC.signal.forceToggle = null;
             if (0 < AC.chronometer.postpone) {
+                deactivateOCTaskCard();
                 CODOMAIN.initialize(TEXT);
                 break;
             }
@@ -3349,6 +3369,7 @@ description: {1 concise sentence narrative summary}
             // Prompt the AI to generate a new card entry, compress an existing card's memories, or continue the story
             let isGenerating = false;
             let isCompressing = false;
+            let activeCompressionConstruct = "";
             if (isPendingGeneration()) {
                 promptGeneration();
             } else if (isAwaitingGeneration()) {
@@ -3496,10 +3517,22 @@ description: {1 concise sentence narrative summary}
                 if (isGenerating) {
                     // Likewise for the card entry generation delimiter
                     context = context.replaceAll("%@GEN@%", "");
+                    if (isCacheEfficient()) {
+                        writeOCTaskCard(buildOCGenerationCardBody(AC.generation.workpiece), AC.generation.workpiece.title, TEXT);
+                    } else {
+                        deactivateOCTaskCard();
+                    }
                 } else {
                     // Or the (mutually exclusive) card memory compression delimiter
                     context = context.replaceAll("%@COM@%", "");
+                    if (isCacheEfficient()) {
+                        writeOCTaskCard(buildOCCompressionCardBody(activeCompressionConstruct), AC.compression.vanityTitle, TEXT);
+                    } else {
+                        deactivateOCTaskCard();
+                    }
                 }
+            } else {
+                deactivateOCTaskCard();
             }
             if ((AC.config.operatingMode === "entity") && (AC.config.ECContextHeader)) {
                 context = context.replace(/^World Lore:$/m, AC.config.ECContextHeader);
@@ -3564,6 +3597,7 @@ description: {1 concise sentence narrative summary}
                         }
                         return buildMemoryConstruct();
                     })();
+                    activeCompressionConstruct = memoryConstruct;
                     // Fill all %{title} placeholders
                     const precursorPrompt = insertTitle(AC.config.compressionPrompt, AC.compression.vanityTitle).trim();
                     const memoryPlaceholderPattern = /(?:[%\$]+\s*|[%\$]*){+\s*memor(y|ies)\s*}+/gi;
@@ -3753,7 +3787,7 @@ description: {1 concise sentence narrative summary}
                         let sawEndSentinel = false;
                         if (AC.config.SCContainerAIEndSentinel !== "") {
                             const endSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIEndSentinel);
-                            const endSentinelRx = new RegExp(`(?:\\n[^\\n]*|\\s*)${endSentinelEscaped}[\\s\\S]*$`, 'i');
+                            const endSentinelRx = new RegExp("(?:\\n[\\s#*>`_\\-]*|\\s*)" + endSentinelEscaped + "[\\s\\S]*$", "i");
                             // If defined, replace the end sentinel and any leading ws and bullet followed by any character to the end of input.
                             sawEndSentinel = endSentinelRx.test(AC.generation.workpiece.entry);
                             if (sawEndSentinel) {
@@ -3764,7 +3798,7 @@ description: {1 concise sentence narrative summary}
                         // Remove begin sentinel and any preceding preamble immediately whenever it appears (greedy to eliminate all preambles/duplicates)
                         if (AC.config.SCContainerAIBeginSentinel !== "") {
                             const beginSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIBeginSentinel);
-                            const beginSentinelRx = new RegExp(`^[\\s\\S]*${beginSentinelEscaped}\\s*`, 'i');
+                            const beginSentinelRx = new RegExp("^[\\s\\S]*" + beginSentinelEscaped + "[*`\\s]*", "i");
                             AC.generation.workpiece.entry = AC.generation.workpiece.entry.replace(beginSentinelRx, "");
                         }
 
@@ -3954,76 +3988,92 @@ description: {1 concise sentence narrative summary}
                     AC.generation.completed + generationsRemaining
                 ));
                 if (generationsRemaining <= 0) {
-                    notify("\"" + AC.generation.workpiece.title + "\" was successfully added to your story cards!");
-                    constructCard(O.f({
-                        type: AC.generation.workpiece.type,
-                        title: AC.generation.workpiece.title,
-                        keys: AC.generation.workpiece.keys,
-                        entry: Internal.SCContainerWrap((function() {
-                            if (AC.config.SCContainerize) {
-                                let cleanEntry = AC.generation.workpiece.entry.trim();
-                                if (AC.config.SCContainerAIBeginSentinel !== "") {
-                                    const beginSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIBeginSentinel);
-                                    const beginSentinelRx = new RegExp(`^[\\s\\S]*${beginSentinelEscaped}\\s*`, 'i');
-                                    cleanEntry = cleanEntry.replace(beginSentinelRx, "");
+                    deactivateOCTaskCard();
+                    const rawModeEmptyBody = AC.config.rawAIResponseMode && ((function() {
+                        let bodyCheck = String(AC.generation.workpiece.entry || "").trim();
+                        if (AC.config.SCContainerAIBeginSentinel !== "") {
+                            bodyCheck = bodyCheck.replace(new RegExp("^[\\s\\S]*" + Internal.escapeRegExp(AC.config.SCContainerAIBeginSentinel) + "[*`\\s]*", "i"), "");
+                        }
+                        if (AC.config.SCContainerAIEndSentinel !== "") {
+                            bodyCheck = bodyCheck.replace(new RegExp("(?:\\n[\\s#*>`_\\-]*|\\s*)" + Internal.escapeRegExp(AC.config.SCContainerAIEndSentinel) + "[\\s\\S]*$", "i"), "");
+                        }
+                        bodyCheck = bodyCheck.replace(/^\s*(?:entity|type)\s*:[^\n]*$/gmi, "").trim();
+                        return bodyCheck === "";
+                    })());
+                    if (rawModeEmptyBody) {
+                        notify("Failed to generate structured card for \"" + AC.generation.workpiece.title + "\"; please retry.");
+                    } else {
+                        notify("\"" + AC.generation.workpiece.title + "\" was successfully added to your story cards!");
+                        constructCard(O.f({
+                            type: AC.generation.workpiece.type,
+                            title: AC.generation.workpiece.title,
+                            keys: AC.generation.workpiece.keys,
+                            entry: Internal.SCContainerWrap((function() {
+                                if (AC.config.SCContainerize) {
+                                    let cleanEntry = AC.generation.workpiece.entry.trim();
+                                    if (AC.config.SCContainerAIBeginSentinel !== "") {
+                                        const beginSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIBeginSentinel);
+                                        const beginSentinelRx = new RegExp("^[\\s\\S]*" + beginSentinelEscaped + "[*`\\s]*", "i");
+                                        cleanEntry = cleanEntry.replace(beginSentinelRx, "");
+                                    }
+                                    if (AC.config.SCContainerAIEndSentinel !== "") {
+                                        const endSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIEndSentinel);
+                                        const endSentinelRx = new RegExp("(?:\\n[\\s#*>`_\\-]*|\\s*)" + endSentinelEscaped + "[\\s\\S]*$", "i");
+                                        cleanEntry = cleanEntry.replace(endSentinelRx, "");
+                                    }
+                                    // Strip leading code fences (```yaml or ``` or '''yaml or ''')
+                                    cleanEntry = cleanEntry.replace(/^\s*(?:```|''')(?:yaml)?\s*/i, "");
+                                    // Strip trailing code fences
+                                    cleanEntry = cleanEntry.replace(/\s*(?:```|''')\s*$/i, "");
+                                    // Normalize em-dash / en-dash bullets
+                                    cleanEntry = cleanEntry.replace(/^[—–]\s*/gm, "- ");
+                                    cleanEntry = cleanEntry.trim();
+                                    const titleHeader = "{title: " + AC.generation.workpiece.title + "}";
+                                    return titleHeader + "\n" + cleanEntry;
                                 }
-                                if (AC.config.SCContainerAIEndSentinel !== "") {
-                                    const endSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIEndSentinel);
-                                    const endSentinelRx = new RegExp(`(?:\\n[^\\n]*|\\s*)${endSentinelEscaped}[\\s\\S]*$`, 'i');
-                                    cleanEntry = cleanEntry.replace(endSentinelRx, "");
+                                if (!AC.config.bulletedListMode) {
+                                    return AC.generation.workpiece.entry;
                                 }
-                                // Strip leading code fences (```yaml or ``` or '''yaml or ''')
-                                cleanEntry = cleanEntry.replace(/^\s*(?:```|''')(?:yaml)?\s*/i, "");
-                                // Strip trailing code fences
-                                cleanEntry = cleanEntry.replace(/\s*(?:```|''')\s*$/i, "");
-                                // Normalize em-dash / en-dash bullets
-                                cleanEntry = cleanEntry.replace(/^[—–]\s*/gm, "- ");
-                                cleanEntry = cleanEntry.trim();
+                                const sentences = splitBySentences(
+                                    formatEntry(
+                                        AC.generation.workpiece.entry.replace(/\s+/g, " ")
+                                    ).replace(/:+/g, "#")
+                                ).map(sentence => {
+                                    sentence = (sentence
+                                        .replaceAll("#", ":")
+                                        .trim()
+                                        .replace(/^-+\s*/, "")
+                                    );
+                                    if (sentence.length < 12) {
+                                        return sentence;
+                                    } else {
+                                        return "\n- " + sentence.replace(/\s*[\.\?!]+$/, "");
+                                    }
+                                });
                                 const titleHeader = "{title: " + AC.generation.workpiece.title + "}";
-                                return titleHeader + "\n" + cleanEntry;
-                            }
-                            if (!AC.config.bulletedListMode) {
-                                return AC.generation.workpiece.entry;
-                            }
-                            const sentences = splitBySentences(
-                                formatEntry(
-                                    AC.generation.workpiece.entry.replace(/\s+/g, " ")
-                                ).replace(/:+/g, "#")
-                            ).map(sentence => {
-                                sentence = (sentence
-                                    .replaceAll("#", ":")
-                                    .trim()
-                                    .replace(/^-+\s*/, "")
-                                );
-                                if (sentence.length < 12) {
-                                    return sentence;
-                                } else {
-                                    return "\n- " + sentence.replace(/\s*[\.\?!]+$/, "");
+                                if (sentences.every(sentence => (sentence.length < 12))) {
+                                    const sentencesJoined = sentences.join(" ").trim();
+                                    if (sentencesJoined === "") {
+                                        return titleHeader;
+                                    } else {
+                                        return limitString(titleHeader + "\n" + sentencesJoined, 2000);
+                                    }
                                 }
-                            });
-                            const titleHeader = "{title: " + AC.generation.workpiece.title + "}";
-                            if (sentences.every(sentence => (sentence.length < 12))) {
-                                const sentencesJoined = sentences.join(" ").trim();
-                                if (sentencesJoined === "") {
-                                    return titleHeader;
-                                } else {
-                                    return limitString(titleHeader + "\n" + sentencesJoined, 2000);
+                                for (let i = sentences.length - 1; 0 <= i; i--) {
+                                    const bulletedEntry = cleanSpaces(titleHeader + sentences.join(" ")).trimEnd();
+                                    if (bulletedEntry.length <= 2000) {
+                                        return bulletedEntry;
+                                    }
+                                    if (sentences.length === 1) {
+                                        break;
+                                    }
+                                    sentences.splice(i, 1);
                                 }
-                            }
-                            for (let i = sentences.length - 1; 0 <= i; i--) {
-                                const bulletedEntry = cleanSpaces(titleHeader + sentences.join(" ")).trimEnd();
-                                if (bulletedEntry.length <= 2000) {
-                                    return bulletedEntry;
-                                }
-                                if (sentences.length === 1) {
-                                    break;
-                                }
-                                sentences.splice(i, 1);
-                            }
-                            return limitString(AC.generation.workpiece.entry, 2000);
-                        })()),
-                        description: AC.generation.workpiece.description,
-                    }), newCardIndex());
+                                return limitString(AC.generation.workpiece.entry, 2000);
+                            })()),
+                            description: AC.generation.workpiece.description,
+                        }), newCardIndex());
+                    }
                     AC.generation.cooldown = AC.config.addCardCooldown;
                     AC.generation.completed = 0;
                     AC.generation.permitted = 34;
@@ -4061,6 +4111,7 @@ description: {1 concise sentence narrative summary}
                 })();
                 postOutputMessage(textClone, AC.compression.completed / (AC.compression.completed + compressionsRemaining));
                 if (compressionsRemaining <= 0) {
+                    deactivateOCTaskCard();
                     const card = getAutoCard(AC.compression.titleKey);
                     if (card === null) {
                         notify(
@@ -4261,6 +4312,7 @@ description: {1 concise sentence narrative summary}
                 }
             }
             AC.signal.forceToggle = null;
+            deactivateOCTaskCard();
             let context = TEXT;
             if ((AC.config.operatingMode === "entity") && (AC.config.ECContextHeader)) {
                 context = context.replace(/^World Lore:$/m, AC.config.ECContextHeader);
@@ -5283,9 +5335,14 @@ description: {1 concise sentence narrative summary}
             for (const card of storyCards) {
                 // Perform some common-sense maintenance while we're here
                 const coerce = (str) => (typeof str === "string") ? str : "";
+                const rawTitle = coerce(card.title);
                 card.keys = coerce(card.keys);
-                if (card.keys.includes("\"agent\"") || card.keys.includes("aidungeon")) {
-                    if (isExternal) {
+                if (
+                    card.keys.includes("\"agent\"")
+                    || card.keys.includes("aidungeon")
+                    || /task\s*[—–-]\s*do\s*not\s*edit/i.test(rawTitle)
+                ) {
+                    if (isExternal && !/task\s*[—–-]\s*do\s*not\s*edit/i.test(rawTitle)) {
                         O.s(card);
                     }
                     continue;
@@ -7095,6 +7152,211 @@ description: {1 concise sentence narrative summary}
             break;
         } return false;
     }
+    function isCacheEfficient() {
+        try {
+            if (typeof info?.useCacheEfficient === "boolean") {
+                state.EC_useCacheEfficient = info.useCacheEfficient;
+                return info.useCacheEfficient;
+            }
+        } catch (_) {}
+        return state.EC_useCacheEfficient === true;
+    }
+    function wasCacheEfficient() {
+        return isCacheEfficient();
+    }
+    function buildOCTaskKeys(targetTitle, sourceText) {
+        const keySet = new Set();
+        const addKey = (k) => {
+            const clean = String(k || "").replace(/[,\\"\n\r]+/g, " ").trim().toLowerCase();
+            if (clean.length >= 2 && clean.length <= 40) {
+                keySet.add(clean);
+            }
+        };
+        if (targetTitle) {
+            addKey(targetTitle);
+            for (const part of String(targetTitle).split(/\s+/)) {
+                if (part.length >= 3) addKey(part);
+            }
+        }
+        if (typeof sourceText === "string" && sourceText.trim() !== "") {
+            const recentSlice = sourceText.slice(-1200);
+            const words = recentSlice.match(/[a-zA-Z]{3,20}/g) || [];
+            for (let i = words.length - 1; i >= 0 && keySet.size < 14; i--) {
+                addKey(words[i]);
+            }
+        }
+        for (const common of ["the", "a", "an", "you", "and", "to", "of", "it", "is", "was", "in", "on", "aidungeon"]) {
+            keySet.add(common);
+        }
+        return Array.from(keySet).join(",");
+    }
+    function writeOCTaskCard(body, targetTitle, sourceText) {
+        try {
+            if (!Array.isArray(storyCards)) return;
+            const cleanBody = String(body || "").trim();
+            if (cleanBody === "") {
+                deactivateOCTaskCard();
+                return;
+            }
+            const keys = buildOCTaskKeys(targetTitle, sourceText);
+            let card = storyCards.find(c => c && c.title === EC_OC_CARD_TITLE);
+            if (!card) {
+                addStoryCard("%@%");
+                const idx = storyCards.findIndex(c => c && (c.title === "%@%" || c.keys === "%@%"));
+                if (idx !== -1) {
+                    card = storyCards[idx];
+                    const targetIdx = Math.min(newCardIndex(), storyCards.length - 1);
+                    if (idx !== targetIdx && targetIdx >= 0) {
+                        storyCards.splice(idx, 1);
+                        storyCards.splice(targetIdx, 0, card);
+                    }
+                }
+            }
+            if (!card || typeof card !== "object") return;
+            card.type = card.type || "class";
+            card.title = EC_OC_CARD_TITLE;
+            card.keys = keys;
+            card.entry = cleanBody.slice(0, 2000);
+            card.description = "[Entity Cards Optimize Context Task] Active for \"" + String(targetTitle || "") + "\" (" + card.entry.length + " chars).\n"
+                + "Automatically populated during card generation/compression while AI Dungeon's Optimize Context setting is enabled, and cleared immediately once finished.";
+            for (const pinProp of ["pinned", "isPinned", "pin", "sticky", "alwaysOn", "alwaysActive"]) {
+                if (storyCards.some(c => c && (typeof c[pinProp] === "boolean"))) {
+                    try { card[pinProp] = true; } catch (_) {}
+                    break;
+                }
+            }
+        } catch (_) {}
+    }
+    function deactivateOCTaskCard() {
+        try {
+            if (!Array.isArray(storyCards)) return;
+            for (const card of storyCards) {
+                if (!card || card.title !== EC_OC_CARD_TITLE) continue;
+                if (card.keys === "" && card.entry === "") continue;
+                card.keys = "";
+                card.entry = "";
+                card.description = "Inactive. Only used temporarily during card generation while AI Dungeon's Optimize Context setting is enabled. Safe to delete.";
+            }
+        } catch (_) {}
+    }
+    function buildOCGenerationCardBody(workpiece) {
+        if (!workpiece || !workpiece.title) return "";
+        const STAMP = "// Entity Cards OC\n";
+        const title = String(workpiece.title);
+        const rawPrompt = String(workpiece.prompt || AC.config.generationPrompt || "");
+        const beginSentinel = AC.config.SCContainerAIBeginSentinel || "ENTITY_BEGIN";
+        const endSentinel = AC.config.SCContainerAIEndSentinel || "ENTITY_END";
+        const cleanBody = (src) => String(src || "")
+            .replace(/(?:[%\$]+\s*|[%\$]*)\{+\s*entry\s*\}+/gi, "")
+            .replace(/^[\s-]*<SYSTEM>\s*/i, "")
+            .replace(/\s*<\/SYSTEM>[\s\S]*$/i, "")
+            .replaceAll("%{title}", title)
+            .replaceAll("%SC_BEGIN_SENTINEL%", beginSentinel)
+            .replaceAll("%SC_END_SENTINEL%", endSentinel)
+            .trim();
+
+        if (!AC.config.rawAIPromptMode) {
+            const partialClassic = formatEntry(String(workpiece.entry || "")).trim().slice(-500);
+            const classicCore = cleanBody(rawPrompt);
+            const contSection = partialClassic
+                ? "\n\n# EXISTING PARTIAL ENTRY FOR " + title + " (CONTINUE WITHOUT REPEATING):\n" + partialClassic
+                : "";
+            const classicCard = STAMP + "<SYSTEM>\n# SYSTEM OVERRIDE — PAUSE STORY FOR THIS TURN ONLY\n"
+                + "Ignore story continuation and Author's Notes this turn. Do NOT write story dialogue or second-person narration.\n"
+                + classicCore + contSection
+                + "\n\n# MANDATORY OUTPUT RULE\nOutput ONLY factual third-person encyclopedic prose sentences about " + title + ".\n</SYSTEM>";
+            return classicCard.length <= 2000 ? classicCard : (classicCard.slice(0, 1990) + "\n</SYSTEM>");
+        }
+
+        const rawEntry = String(workpiece.entry || "");
+        const strippedEntry = rawEntry
+            .replace(new RegExp("^[\\s\\S]*" + Internal.escapeRegExp(beginSentinel) + "[*`\\s]*", "i"), "")
+            .trim();
+        const nonHeaderLines = strippedEntry
+            .replace(/^\s*(?:entity|type)\s*:[^\n]*$/gmi, "")
+            .trim();
+        const isFirstTurn = (nonHeaderLines === "");
+
+        const explicitType = workpiece.explicitType
+            ? (TYPE_ALIAS_MAP[String(workpiece.explicitType).toLowerCase()] || workpiece.explicitType)
+            : null;
+        const detectedTypeMatch = strippedEntry.match(/(?:^|\n)\s*type:\s*([A-Za-z]+)/i);
+        const knownType = explicitType || (detectedTypeMatch ? detectedTypeMatch[1] : null);
+        const workingPrompt = knownType ? getSingleTypePrompt(rawPrompt, knownType) : rawPrompt;
+
+        const wrapDirective = (innerBody) => {
+            if (isFirstTurn) {
+                return STAMP + "<SYSTEM>\n"
+                    + "# SYSTEM OVERRIDE — PAUSE STORY FOR THIS TURN ONLY\n"
+                    + "Ignore story continuation and Author's Notes this turn. Write ZERO story prose or dialogue.\n"
+                    + innerBody + "\n\n"
+                    + "# MANDATORY OUTPUT RULES\n"
+                    + "1. FIRST LINE OF OUTPUT MUST BE: " + beginSentinel + "\n"
+                    + "2. Fill fields concisely from story context; end with `description:` (1 sentence).\n"
+                    + "3. LAST LINE OF OUTPUT MUST BE: " + endSentinel + "\n"
+                    + "</SYSTEM>";
+            }
+            const cleanPartial = strippedEntry.slice(-450);
+            return STAMP + "<SYSTEM>\n"
+                + "# SYSTEM OVERRIDE — PAUSE STORY FOR THIS TURN ONLY\n"
+                + "Complete the unfinished YAML entity card for '" + title + "'. Write ZERO story prose or dialogue.\n"
+                + innerBody + "\n\n"
+                + "# CONTINUE AFTER THESE LINES (DO NOT REPEAT):\n"
+                + beginSentinel + "\n"
+                + cleanPartial + "\n\n"
+                + "# MANDATORY OUTPUT RULES\n"
+                + "1. Output ONLY remaining YAML fields for '" + title + "', ending with `description:` and `" + endSentinel + "`.\n"
+                + "</SYSTEM>";
+        };
+
+        const condenseMultiBranch = (srcBody) => {
+            const ifStart = srcBody.search(/if\s*\(\s*entityType/i);
+            const branchPart = (ifStart !== -1) ? srcBody.slice(ifStart) : srcBody;
+            const condensed = branchPart
+                .replace(/\s*\]\s*$/, "")
+                .replace(/\/\/[^\n]*\n/g, "")
+                .replace(/print\s*`\s*\n?/gi, "")
+                .replace(/`\s*;\s*\n?/g, "")
+                .replace(new RegExp("^\\s*" + Internal.escapeRegExp(beginSentinel) + "\\s*\\n", "gmi"), "")
+                .replace(new RegExp("^\\s*" + Internal.escapeRegExp(endSentinel) + "\\s*\\n?", "gmi"), "")
+                .replace(/^entity:\s*[^\n]+\n/gmi, "")
+                .replace(/^type:\s*[^\n]+\n/gmi, "")
+                .replace(/^description:\s*[^\n]+\n?/gmi, "")
+                .replace(/\n{2,}/g, "\n")
+                .trim();
+            return "[# JellyFish (JFSH): Classify '" + title + "' (Person > Organization > Location > Event > Thing) and output ONLY its matching YAML block:\n"
+                + condensed + "\n# Shape:\n"
+                + beginSentinel + "\nentity: " + title + "\ntype: {Person|Location|Organization|Thing|Event}\n<matching fields>\ndescription: {1 concise sentence.}\n"
+                + endSentinel + "\n]";
+        };
+
+        const rawBody = cleanBody(workingPrompt);
+        let candidate = wrapDirective(rawBody);
+        if (candidate.length <= 2000) return candidate;
+
+        candidate = wrapDirective(condenseMultiBranch(rawBody));
+        if (candidate.length <= 2000) return candidate;
+
+        const liteBody = cleanBody(knownType ? getSingleTypePrompt(EC_PRESETS.lite, knownType) : EC_PRESETS.lite);
+        candidate = wrapDirective(condenseMultiBranch(liteBody));
+        return candidate.length <= 2000 ? candidate : (candidate.slice(0, 1990) + "\n</SYSTEM>");
+    }
+    function buildOCCompressionCardBody(memoryConstruct) {
+        const STAMP = "// Entity Cards OC\n";
+        const title = String(AC.compression.vanityTitle || "");
+        const precursor = insertTitle(AC.config.compressionPrompt, title)
+            .replace(/(?:[%\$]+\s*|[%\$]*)\{+\s*memor(?:y|ies)\s*\}+/gi, "")
+            .replace(/^[\s-]*<SYSTEM>\s*/i, "")
+            .replace(/\s*<\/SYSTEM>[\s\S]*$/i, "")
+            .trim();
+        const header = STAMP + "<SYSTEM>\n# SYSTEM OVERRIDE — PAUSE STORY FOR THIS TURN ONLY\n"
+            + precursor + "\n\n# OLD MEMORIES FOR " + title + " TO SUMMARIZE:\n\"\"\"\n";
+        const midClose = "\n\"\"\"";
+        const footer = "\n\n# MANDATORY OUTPUT RULE\nOutput ONLY one concise past-tense summary paragraph for " + title + ". Write ZERO current story narration.\n</SYSTEM>";
+        const maxConstruct = Math.max(100, 2000 - header.length - midClose.length - footer.length);
+        const trimmedConstruct = String(memoryConstruct || "").trim().slice(0, maxConstruct);
+        return header + trimmedConstruct + midClose + footer;
+    }
     function isSystemBanned(lowerTitle) {
         if (systemBans.size === 0) {
             const controlVariants = getControlVariants();
@@ -7110,6 +7372,12 @@ description: {1 concise sentence narrative summary}
                 dataVariants.debug.keys,
                 dataVariants.critical.title,
                 dataVariants.critical.keys,
+                EC_OC_CARD_TITLE,
+                "entity cards task",
+                "inner entity task",
+                "inner self task",
+                "\uD83E\uDDE0 inner entity task — do not edit",
+                "\uD83E\uDDE0 inner self task — do not edit",
                 ...Object.values(Words.reserved)
             ]);
             for (let i = 0; i < sys.length; i++) {
