@@ -56,11 +56,31 @@ You can use either `/ec` or `/ac` in the AI Dungeon action input bar:
 | `/ec preset custom` | Activates the **Custom** preset using your live edited templates |
 | `/ec header <text>` | Sets a custom context header (e.g., `/ec header Codex Entities:`) |
 | `/ec <Title>` | Manually directs card generation for a specific title |
+| `/ec <Title> -<type>` | Generates a card with an explicit entity type flag (e.g. `/ec Futaba -p` or `/ec -loc Tokyo`). Optimizes prompt to only that branch (~80% token savings)! |
 | `/ec <Title> / {Details}` | Generates a card for a title with additional guidance details |
-| `/ec redo <Title>` | Regenerates an existing story card |
+| `/ec redo <Title> [ -<type> ]` | Regenerates an existing story card, optionally overriding its type |
 | `/ec redo all` | Regenerates all automatic story cards |
 
 *(Classic `/ac` commands remain 100% compatible and functional.)*
+
+### Explicit Entity Type Flags (`-<type>`)
+
+When manually generating or redoing a card, you can specify the entity type using `-<type>` (or `--<type>`), either before or after the title:
+- **Person:** `-p`, `-person`, `-char`, `-character`, `-npc`, `-who`
+- **Location:** `-l`, `-loc`, `-location`, `-place`, `-where`
+- **Organization:** `-o`, `-org`, `-organization`, `-faction`, `-group`, `-guild`
+- **Thing:** `-t`, `-thing`, `-item`, `-object`, `-what`
+- **Event:** `-e`, `-event`, `-incident`, `-when`
+
+**Examples:**
+* `/ec Futaba -p` *(or `/ec -p Futaba`)*
+* `/ec Tokyo City -loc / {A sprawling cyberpunk metropolis}`
+* `/ec -org Phantom Thieves`
+* `/ec Holy Grail -item`
+* `/ec The Great Calamity -e`
+* `/ec redo Futaba -person`
+
+> **Token Optimization:** When an entity flag is provided, Entity-Cards dynamically isolates only the single matching JellyFish template branch, discarding the other 4 branches. This reduces the AI prompt from ~2,713 characters (~550 tokens) down to ~540 characters (~125 tokens)—an **~80% prompt token reduction** while eliminating schema hallucination! Hyphenated names (e.g., `Spider-Man` or `Top-Secret Facility`) are safely preserved.
 
 ---
 
