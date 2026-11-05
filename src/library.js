@@ -6354,19 +6354,28 @@ description: {1 concise sentence narrative summary}
     }
     function doPlayerCommands(input) {
         let result = "";
-        for (const command of (
-            (function() {
-                if (/^\s*> [\s\S]*? says?,?\s+["“][\s\S]*?["”]\s*$/i.test(input)) {
-                    return input.replace(/[\.\?!:,\s]*["”]\s*$/, "");
-                } else {
-                    return input.trimEnd();
-                }
-            })().split(/(?=\/\s*(?:A|E)\s*C)/i)
-        )) {
+        const chunks = input.split(/(?=\/\s*(?:A|E)\s*C)/i);
+        let cumulativeOffset = 0;
+        for (let i = 0; i < chunks.length; i++) {
+            const rawChunk = chunks[i];
             const prefixPattern = /^\/\s*(?:A|E)\s*C/i;
-            if (!prefixPattern.test(command)) {
+            if (!prefixPattern.test(rawChunk)) {
+                cumulativeOffset += rawChunk.length;
                 continue;
             }
+            const textBefore = input.slice(0, cumulativeOffset);
+            const openDQuote = (textBefore.match(/["“]/g) || []).length;
+            const openSQuote = (textBefore.match(/['‘]/g) || []).length;
+            let command = rawChunk;
+            if (openDQuote % 2 !== 0) {
+                const closeIdx = command.search(/["”](?=[^"”]*$)/);
+                if (closeIdx !== -1) command = command.slice(0, closeIdx);
+            } else if (openSQuote % 2 !== 0) {
+                const closeIdx = command.search(/['’](?=[^'’]*$)/);
+                if (closeIdx !== -1) command = command.slice(0, closeIdx);
+            }
+            command = command.replace(/[\s\.\?!:;,"”'’]+$/, "");
+            cumulativeOffset += rawChunk.length;
             const cmdPrefix = (command.match(/^\/\s*(A|E)C/i)?.[1]?.toUpperCase() || (AC.config.operatingMode === "entity" ? "E" : "A")) + "C";
             const [requestTitle, requestDetails, requestEntry] = (command
                 .replace(/(?:{\s*)|(?:\s*})/g, "")
