@@ -6462,6 +6462,71 @@ description: {1 concise sentence narrative summary}
                     : `Entity Cards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC`;
                 result += `/${cmdPrefix} version -> ${buildName} (git: ${gitHash}, built: ${buildTime})\n\n`;
                 logEvent(`/${cmdPrefix} version`);
+            } else if (/^(?:info|diag|diagnostics|debug|sysinfo)\b/i.test(requestTitle)) {
+                const inf = (typeof info === "object" && info) ? info : {};
+                const cards = Array.isArray(storyCards) ? storyCards : [];
+                const st = (typeof state === "object" && state) ? state : {};
+
+                const modelStr = inf.storyModel ? `${inf.storyModel.name || "Unknown"}${inf.storyModel.version ? " " + inf.storyModel.version : ""}`.trim() : "Unknown";
+                const cacheStr = inf.useCacheEfficient ? "Enabled (true)" : "Disabled (false)";
+                const maxCharsStr = inf.maxChars ? `${inf.maxChars.toLocaleString()} chars` : "N/A";
+                const turnStr = inf.actionCount ?? "N/A";
+
+                const ieBuild = globalThis.INNER_ENTITY_BUILD || "Not loaded";
+                const ieFlavor = globalThis.INNER_ENTITY_FLAVOR || "N/A";
+                const ieGit = globalThis.INNER_ENTITY_GIT_HASH || "N/A";
+                const ecVersion = typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0";
+                const ecGit = typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f4cfb67";
+
+                const globalsList = [
+                    typeof globalThis.InnerEntity === "function" ? "InnerEntity" : null,
+                    typeof globalThis.InnerSelf === "function" ? "InnerSelf" : null,
+                    typeof globalThis.AutoCards === "function" ? "AutoCards" : null,
+                    typeof globalThis.EntityCards === "function" ? "EntityCards" : null,
+                    typeof globalThis.MainSettings === "function" ? "MainSettings" : null
+                ].filter(Boolean).join(", ") || "None";
+
+                const totalCards = cards.length;
+                const hasMaster = cards.some(c => /Configure\s+Auto-Cards/i.test(c.title || ""));
+                const hasCompanion = cards.some(c => /Configure\s+Entity\s+Cards/i.test(c.title || ""));
+                const hasInnerEntity = cards.some(c => /Configure\s+Inner\s+(?:Entity|Self)/i.test(c.title || ""));
+                const hasTaskCard = cards.some(c => /task\s*[—–-]\s*do\s*not\s*edit/i.test(c.title || ""));
+                const brainCardCount = cards.filter(c => String(c.keys || "").includes("agent") || /brain/i.test(c.type || "")).length;
+                const loreCardCount = cards.filter(c => /{title:/i.test(c.entry || "") || /(?:^|\n)entity:/i.test(c.entry || "")).length;
+
+                const isState = st.InnerSelf;
+                const isEnabled = isState ? (isState.enabled !== false ? "Active" : "Disabled") : (globalThis.InnerEntity ? "Active" : "N/A");
+                const isAgent = isState?.agent || "None (idle)";
+                const isOps = isState?.ops ?? 0;
+
+                const cooldownMax = AC.config.addCardCooldown ?? 28;
+                const cooldownCur = AC.generation.cooldown ?? 0;
+                const updatesVal = AC.config.defaultCardsDoMemoryUpdates ?? false;
+                const bypassVal = AC.config.manualBypassTitleFilters !== false;
+                const filterVal = AC.config.filterCommonEntities !== false;
+
+                result += `/${cmdPrefix} info ->\n`
+                    + `=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n`
+                    + `• Environment:\n`
+                    + `  - Story Model:      ${modelStr}\n`
+                    + `  - Optimize Context: ${cacheStr}\n`
+                    + `  - Max Context:      ${maxCharsStr} | Action Turn: ${turnStr}\n`
+                    + `• Loaded Scripts:\n`
+                    + `  - Inner Entity:     ${ieBuild} [${ieFlavor}] (git: ${ieGit})\n`
+                    + `  - Entity Cards:     Ver.${ecVersion}-EC (git: ${ecGit})\n`
+                    + `  - Active Globals:   ${globalsList}\n`
+                    + `• Engine State:\n`
+                    + `  - Mode: ${AC.config.operatingMode} | Preset: ${AC.config.ECPreset} | Header: "${AC.config.ECContextHeader}"\n`
+                    + `  - Cooldown: ${cooldownCur}/${cooldownMax} | Pending: ${AC.generation.pending.length} | Updates: ${updatesVal}\n`
+                    + `  - Title Bypass: ${bypassVal} | Filter Common: ${filterVal}\n`
+                    + `• Character Minds (Inner Self):\n`
+                    + `  - Status: ${isEnabled} | Active Agent: ${isAgent} | Brain Ops: ${isOps}\n`
+                    + `• Story Cards Overview:\n`
+                    + `  - Total Cards:      ${totalCards} (Lore: ${loreCardCount}, Brains: ${brainCardCount})\n`
+                    + `  - Config Cards:     Master: ${hasMaster ? "Yes" : "No"} | Companion: ${hasCompanion ? "Yes" : "No"} | IE: ${hasInnerEntity ? "Yes" : "No"}\n`
+                    + `  - OC Task Card:     ${hasTaskCard ? "Active" : "None"}\n`
+                    + `=============================================\n\n`;
+                logEvent(`/${cmdPrefix} info`);
             } else if (/^(?:-h|--help|help|-\?|\?)\b/i.test(requestTitle)) {
                 result += `/${cmdPrefix} help -> Entity Cards Commands:\n`
                     + `  /${cmdPrefix.toLowerCase()}                       Trigger card generation for recent titles\n`
@@ -6472,6 +6537,7 @@ description: {1 concise sentence narrative summary}
                     + `  /${cmdPrefix.toLowerCase()} preset <name>         standard | lite | authoring | custom\n`
                     + `  /${cmdPrefix.toLowerCase()} mode <mode>           entity | classic\n`
                     + `  /${cmdPrefix.toLowerCase()} header <text>         Set custom context header\n`
+                    + `  /${cmdPrefix.toLowerCase()} info, diag            Display detailed system & script diagnostics\n`
                     + `  /${cmdPrefix.toLowerCase()} -v, --version         Show script version & git hash\n`
                     + `  /${cmdPrefix.toLowerCase()} -h, --help            Show this command help\n\n`
                     + `Type flags: -p (Person), -loc (Location), -org (Organization), -t (Thing), -e (Event)\n`

@@ -60,6 +60,7 @@ You can use either `/ec` or `/ac` in the AI Dungeon action input bar:
 | `/ec <Title> / {Details}` | Generates a card for a title with additional guidance details |
 | `/ec redo <Title> [ -<type> ]` | Regenerates an existing story card, optionally overriding its type |
 | `/ec redo all` | Regenerates all automatic story cards |
+| `/ec info, diag` | Displays comprehensive system diagnostics (model, cache, scripts, cooldowns, card counts) |
 | `/ec -v, --version` | Displays active script build version and git commit hash |
 | `/ec -h, --help` | Displays command help listing and type flag shorthands |
 

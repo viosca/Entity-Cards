@@ -117,6 +117,8 @@ When using `/ec <Title> -<type>` or `/ec -<type> <Title>`, you can use any of th
   Activates the **Custom** preset using your live edited templates.
 * `/ec header <text>`  
   Sets a custom context header replacing "World Lore:" (e.g. `/ec header Codex Entities:`).
+* `/ec info` *(or `/ec diag`)*  
+  Generates a complete system diagnostic report (story model, prompt caching, script versions, cooldowns, and story card status) for easy troubleshooting.
 * `/ec -v` *(or `/ec --version`)*  
   Displays the active script build version, generation timestamp, and git commit hash.
 * `/ec -h` *(or `/ec --help`)*  

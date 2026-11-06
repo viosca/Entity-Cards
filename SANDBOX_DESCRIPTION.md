@@ -63,6 +63,7 @@ Roleplay or brainstorm freely with the AI to flesh out an original character, fa
 * **Response Length Slider:** Setting your in-game **Response Length** slider to **250+ tokens** (in Gameplay Settings) allows complete entity cards to generate in a single turn!
 * **Director Mode:** Open the flame menu (Gameplay Settings) and change your character name to "Author" to freely direct the AI without locking yourself into an in-game persona.
 * **Lightweight Speed:** Type `/ec preset lite` if you want ultra-fast, compact cards (~60 tokens).
+* **Instant System Diagnostics:** Type `/ec info` (or `/ec diag`) at any time to output a full diagnostic report of your story model, prompt cache status, script versions, and card counts.
 
 ---
 
