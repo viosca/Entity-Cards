@@ -1,5 +1,5 @@
 const assert = require("assert");
-const GetoptAID = require("../lib/getopt-aid");
+const GetoptAID = require("../submodules/getopt-aid/src/getopt-aid");
 
 console.log("==================================================================");
 console.log("  TESTING STANDALONE GetoptAID LIBRARY");

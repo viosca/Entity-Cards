@@ -1,0 +1,3 @@
+[submodule "submodules/getopt-aid"]
+	path = submodules/getopt-aid
+	url = https://github.com/viosca/getopt-aid.git
