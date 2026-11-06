@@ -103,26 +103,32 @@ When using `/ec <Title> -<type>` or `/ec -<type> <Title>`, you can use any of th
   *Example:* `/ec The Blackout -event`
 
 ### Configuration & Mode Commands
-* `/ec mode entity`  
+* `/ec -m entity` *(or `/ec --mode entity`)*  
   Switches the engine to **Entity Cards** mode (structured YAML schemas and companion card).
-* `/ec mode classic`  
+* `/ec -m classic` *(or `/ec --mode classic`)*  
   Switches the engine to **Classic Auto-Cards** mode (prose prompt and bulleted lists).
-* `/ec preset standard`  
+* `/ec -P standard` *(or `/ec --preset standard`)*  
   Activates the **Standard** balanced 5-type YAML preset.
-* `/ec preset lite`  
+* `/ec -P lite` *(or `/ec --preset lite`)*  
   Activates the ultra-compact **Lite** preset (ideal for smaller models or fast generation).
-* `/ec preset authoring`  
+* `/ec -P authoring` *(or `/ec --preset authoring`)*  
   Activates the narrative **Authoring** preset (secrets, motives, scene dynamics).
-* `/ec preset custom`  
+* `/ec -P custom` *(or `/ec --preset custom`)*  
   Activates the **Custom** preset using your live edited templates.
-* `/ec header <text>`  
-  Sets a custom context header replacing "World Lore:" (e.g. `/ec header Codex Entities:`).
-* `/ec info` *(or `/ec diag`)*  
+* `/ec --header <text>`  
+  Sets a custom context header replacing "World Lore:" (e.g. `/ec --header "Codex Entities:"`).
+* `/ec -i` *(or `/ec --info`, `/ec --diag`)*  
   Generates a complete system diagnostic report (story model, prompt caching, script versions, cooldowns, and story card status) for easy troubleshooting.
 * `/ec -v` *(or `/ec --version`)*  
   Displays the active script build version, generation timestamp, and git commit hash.
 * `/ec -h` *(or `/ec --help`)*  
   Displays the in-game command help listing and entity type flag options.
+* `/ec -r <Title>` *(or legacy `/ec redo <Title>`)*  
+  Regenerates an existing story card.
+* `/ec -R` *(or `/ec --redo-all`, legacy `/ec redo all`)*  
+  Regenerates all automatic story cards.
+
+*(Note: Because options use POSIX `-` and `--` flags, titles like "Info", "Mode", "Preset", or "Help" never collide with commands. Any title in quotes—such as `/ec "Info" -org`—is strictly protected as a title.)*
 
 ---
 
@@ -156,7 +162,7 @@ Dedicated to Named Entity Recognition and prompt customization:
 * **AI Dungeon Response Length:**  
   Setting your in-game **Response Length** slider to **200+ tokens** in AI Dungeon's gameplay settings ensures complete entity cards generate in a single turn. With shorter settings (e.g. 50–100 tokens), the script will pause and prompt you with `>>> please select "continue" <<<` to finish the entity template across turns.
 * **Need Instant 1-Turn Generations?**  
-  Switch to the lightweight preset by typing `/ec preset lite`. Its streamlined schemas generate in ~60 tokens, completing in a single turn even on short response sliders.
+  Switch to the lightweight preset by typing `/ec -P lite`. Its streamlined schemas generate in ~60 tokens, completing in a single turn even on short response sliders.
 * **Ambiguous Names:**  
   If a character shares a name with a place or object (e.g. "Virginia" or "Rose"), always use an explicit flag: `/ec Virginia -p` or `/ec -p Virginia`. This guarantees the AI receives only the Person schema.
 

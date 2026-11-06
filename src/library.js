@@ -39,7 +39,7 @@ Forked and expanded as "Entity Cards" by Randy Viosca (@Random_Variable on AI Du
 function AutoCards(inHook, inText, inStop) {
     "use strict";
     const EC_BUILD_VERSION = "2.8.0";
-    const EC_BUILD_TIMESTAMP = "2026-11-06 05:05 UTC";
+    const EC_BUILD_TIMESTAMP = "2026-11-06 05:45 UTC";
     const EC_BUILD_GIT_HASH = "f4cfb67";
     /*
     Default Auto-Cards settings
@@ -393,6 +393,143 @@ description: {1 concise sentence narrative summary}
     };
 
     /**
+     * Parses command-line tokens, POSIX/GNU flags (-v, -h, -i, -m, -P, --header, -r, -R, type flags),
+     * and separates them cleanly from positional title tokens.
+     * Tokens enclosed in quotes (straight or curly) are always treated as titles.
+     * @param {string} str Raw command-line string
+     * @returns {{ flags: Object, title: string }}
+     */
+    function parseCommandLine(str) {
+        if (!str || typeof str !== "string") {
+            return { flags: {}, title: "" };
+        }
+
+        const tokens = [];
+        const tokenRegex = /"([^"]*)"|'([^']*)'|“([^”]*?)”|‘([^’]*?)’|(\S+)/g;
+        let match;
+        while ((match = tokenRegex.exec(str)) !== null) {
+            const val = match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5];
+            const isQuoted = (match[5] === undefined);
+            tokens.push({ text: val, isQuoted });
+        }
+
+        const flags = {};
+        const titleParts = [];
+
+        for (let i = 0; i < tokens.length; i++) {
+            let { text, isQuoted } = tokens[i];
+
+            if (isQuoted) {
+                titleParts.push(text);
+                continue;
+            }
+
+            // Normalize Unicode smart dashes (en-dash, em-dash) at start of flag tokens
+            if (/^[—–]/.test(text)) {
+                text = text.replace(/^[—–]{2}/, "--").replace(/^[—–]/, "-");
+            }
+
+            // Clean trailing punctuation on flags (e.g. -p. or -person!) while preserving -?
+            const cleanFlag = (text === "-?" || text === "--?") ? text : text.replace(/(?<=\w)[.!?,;:"”'’)]+$/, "");
+
+            // Version: -v, --version, -version
+            if (/^(?:--version|-version|-v)$/i.test(cleanFlag)) {
+                flags.version = true;
+                continue;
+            }
+
+            // Help: -h, --help, -help, -?
+            if (/^(?:--help|-help|-h|-\?)$/i.test(cleanFlag)) {
+                flags.help = true;
+                continue;
+            }
+
+            // Info / Diag: -i, --info, -info, --diag, -diag, --diagnostics, --debug, --sysinfo
+            if (/^(?:--info|-info|-i|--diag|-diag|--diagnostics|--debug|--sysinfo)$/i.test(cleanFlag)) {
+                flags.info = true;
+                continue;
+            }
+
+            // Mode: -m <val>, --mode <val>, --mode=<val>, -m=<val>
+            if (/^(?:--mode=|-mode=|-m=)(.*)$/i.test(cleanFlag)) {
+                flags.mode = cleanFlag.replace(/^(?:--mode=|-mode=|-m=)/i, "").toLowerCase();
+                continue;
+            }
+            if (/^(?:--mode|-mode|-m)$/i.test(cleanFlag)) {
+                if (i + 1 < tokens.length && !tokens[i + 1].text.startsWith("-")) {
+                    flags.mode = tokens[++i].text.toLowerCase();
+                } else {
+                    flags.mode = "";
+                }
+                continue;
+            }
+
+            // Preset: -P <val>, --preset <val>, --preset=<val>, -P=<val> (case-sensitive -P to distinguish from -p person)
+            if (/^(?:--preset=|-preset=|-P=)(.*)$/i.test(cleanFlag)) {
+                flags.preset = cleanFlag.replace(/^(?:--preset=|-preset=|-P=)/i, "").toLowerCase();
+                continue;
+            }
+            if (/^(?:--preset|-preset|-P)$/.test(cleanFlag) || /^--preset$/i.test(cleanFlag)) {
+                if (i + 1 < tokens.length && !tokens[i + 1].text.startsWith("-")) {
+                    flags.preset = tokens[++i].text.toLowerCase();
+                } else {
+                    flags.preset = "";
+                }
+                continue;
+            }
+
+            // Header: --header <val>, --header=<val>
+            if (/^(?:--header=|-header=)(.*)$/i.test(cleanFlag)) {
+                flags.header = cleanFlag.replace(/^(?:--header=|-header=)/i, "").replace(/^["“'’]|["”'’]$/g, "");
+                continue;
+            }
+            if (/^(?:--header|-header)$/i.test(cleanFlag)) {
+                const headerTokens = [];
+                while (i + 1 < tokens.length && !tokens[i + 1].text.startsWith("-")) {
+                    headerTokens.push(tokens[++i].text);
+                }
+                flags.header = headerTokens.join(" ").trim();
+                continue;
+            }
+
+            // Redo All: -R, --redo-all, -redo-all, or legacy "redo all" / "retry all" / "rewrite all" / "remake all"
+            if (/^(?:--redo-all|-redo-all|-R)$/.test(cleanFlag) || /^--redo-all$/i.test(cleanFlag) || (i === 0 && /^(?:redo|retry|rewrite|remake)$/i.test(cleanFlag) && tokens[i + 1] && /^(?:all|every)$/i.test(tokens[i + 1].text))) {
+                flags.redoAll = true;
+                if (/^(?:redo|retry|rewrite|remake)$/i.test(cleanFlag)) i++;
+                continue;
+            }
+
+            // Redo single: -r, --redo, -r=<title>, --redo=<title>, or legacy "redo" / "retry" / "rewrite" / "remake"
+            if (/^(?:--redo=|-redo=|-r=)(.*)$/i.test(cleanFlag)) {
+                flags.redo = true;
+                const target = cleanFlag.replace(/^(?:--redo=|-redo=|-r=)/i, "").trim();
+                if (target) titleParts.push(target);
+                continue;
+            }
+            if (/^(?:--redo|-redo|-r)$/i.test(cleanFlag) || (i === 0 && /^(?:redo|retry|rewrite|remake)$/i.test(cleanFlag))) {
+                flags.redo = true;
+                continue;
+            }
+
+            // Entity Type flags: -p, --person, -loc, etc.
+            const typeMatch = cleanFlag.match(/^(?:--|-)(p|person|char|character|npc|who|l|loc|location|place|where|o|org|organization|faction|group|guild|t|thing|item|object|what|e|event|incident|when)$/i);
+            if (typeMatch) {
+                const alias = typeMatch[1].toLowerCase();
+                flags.entityType = TYPE_ALIAS_MAP[alias];
+                flags.matchedAlias = alias;
+                continue;
+            }
+
+            titleParts.push(text);
+        }
+
+        return {
+            flags,
+            title: titleParts.join(" ").trim()
+        };
+    }
+
+    /**
      * Parses an entity type flag from a command string or title (e.g. "Futaba -p" or "-loc Tokyo").
      * Safely ignores hyphenated words (e.g., "Spider-Man").
      * @param {string} input String containing title and optional -<type> flag
@@ -402,22 +539,11 @@ description: {1 concise sentence narrative summary}
         if (!input || typeof input !== "string") {
             return { title: input, entityType: null, matchedAlias: null };
         }
-        const aliasPattern = Object.keys(TYPE_ALIAS_MAP).join("|");
-        const flagRegex = new RegExp(`(?:^|\\s+)[-\\u2013\\u2014]{1,2}(${aliasPattern})(?=\\s|[.!?,;:"”'’)\\]}]|$)[.!?,;:"”'’)\\]}]*`, "i");
-        const match = input.match(flagRegex);
-        if (!match) {
-            return { title: input.trim(), entityType: null, matchedAlias: null };
-        }
-        const matchedAlias = match[1].toLowerCase();
-        const entityType = TYPE_ALIAS_MAP[matchedAlias] || null;
-        let cleanedTitle = input
-            .replace(flagRegex, " ")
-            .replace(/^[\s"“'’]+|[\s.!?,;:"”'’]+$/g, "")
-            .replace(/\s{2,}/g, " ");
+        const parsed = parseCommandLine(input);
         return {
-            title: cleanedTitle,
-            entityType: entityType,
-            matchedAlias: matchedAlias
+            title: parsed.title,
+            entityType: parsed.flags.entityType || null,
+            matchedAlias: parsed.flags.matchedAlias || null
         };
     }
 
@@ -1259,6 +1385,14 @@ description: {1 concise sentence narrative summary}
             // AutoCards was (probably) called without arguments, return an external API to allow other script creators to programmatically govern the behavior of Auto-Cards from elsewhere within their own scripts
             CODOMAIN.initialize({API: O.f(Object.fromEntries(Object.entries({
                 // Call these API functions like so: AutoCards().API.nameOfFunction(argumentsOfFunction)
+                /*** Parses command-line tokens, POSIX/GNU flags, and title tokens
+                * @function
+                * @param {string} input Raw command-line string
+                * @returns {{ flags: Object, title: string }}
+                */
+                parseCommandLine: function(input) {
+                    return parseCommandLine(input);
+                },
                 /*** Parses an entity type flag from a command string or title (e.g. "Futaba -p" -> { title: "Futaba", entityType: "Person" })
                 * @function
                 * @param {string} input String containing title and optional -<type> flag
@@ -4917,6 +5051,9 @@ description: {1 concise sentence narrative summary}
         static getSingleTypePrompt(fullPrompt, targetType) {
             return getSingleTypePrompt(fullPrompt, targetType);
         }
+        static parseCommandLine(input) {
+            return parseCommandLine(input);
+        }
         static parseTypeFlag(input) {
             return parseTypeFlag(input);
         }
@@ -6401,7 +6538,14 @@ description: {1 concise sentence narrative summary}
                 const closeIdx = command.search(/['’](?=[^'’]*$)/);
                 if (closeIdx !== -1) command = command.slice(0, closeIdx);
             }
-            command = command.replace(/[\s\.\?!:;,"”'’]+$/, "");
+            command = command.replace(/[\s\.\?!:;]+$/, "");
+            if (openDQuote % 2 !== 0 || (command.match(/["“]/g) || []).length % 2 !== 0) {
+                command = command.replace(/["”]+$/, "");
+            }
+            if (openSQuote % 2 !== 0 || (command.match(/['‘]/g) || []).length % 2 !== 0) {
+                command = command.replace(/['’]+$/, "");
+            }
+            command = command.replace(/[\s\.\?!:;]+$/, "");
             cumulativeOffset += rawChunk.length;
             const cmdPrefix = (command.match(/^\/\s*(A|E)C/i)?.[1]?.toUpperCase() || (AC.config.operatingMode === "entity" ? "E" : "A")) + "C";
             const [requestTitle, requestDetails, requestEntry] = (command
@@ -6415,162 +6559,158 @@ description: {1 concise sentence narrative summary}
             if (!requestTitle) {
                 // Request with no args
                 AC.generation.cooldown = 0;
-                result += "/EC -> Card generation triggered!\n\n";
-                logEvent("/EC");
-            } else if (/^mode\s+(entity|classic)/i.test(requestTitle)) {
-                const requestedMode = requestTitle.match(/^mode\s+(entity|classic)/i)[1].toLowerCase();
-                applyModeSwitch(requestedMode);
-                result += "/EC mode -> Switched to " + (requestedMode === "entity" ? "Entity Cards" : "Classic Auto-Cards") + "\n\n";
-                logEvent("/EC mode: " + requestedMode);
-            } else if (/^preset\s+(standard|lite|authoring|custom)/i.test(requestTitle)) {
-                const reqPreset = requestTitle.match(/^preset\s+(standard|lite|authoring|custom)/i)[1].toLowerCase();
-                AC.config.ECPreset = reqPreset;
-                if (EC_PRESETS[reqPreset]) {
-                    AC.config.generationPrompt = EC_PRESETS[reqPreset];
-                }
-                const ecTitle = getControlVariants().configureEC.title;
-                const ecCard = Internal.getCard(card => card && card.title === ecTitle);
-                if (ecCard) {
-                    ecCard.entry = getECConfigureCardEntry();
-                    ecCard.description = getECConfigureCardDescription();
-                }
-                result += "/EC preset -> Set to " + (reqPreset[0].toUpperCase() + reqPreset.slice(1)) + "\n\n";
-                logEvent("/EC preset: " + reqPreset);
-            } else if (/^header\s+/i.test(requestTitle)) {
-                const newHeader = requestTitle.replace(/^header\s+/i, "").trim();
-                AC.config.ECContextHeader = newHeader;
-                const cfgTitle = getControlVariants().configure.title;
-                const cfgCard = Internal.getCard(card => card.title === cfgTitle);
-                if (cfgCard) {
-                    cfgCard.entry = cfgCard.entry.replace(
-                        /(?:\*EC\s+)?(?:Entity Cards\s+)?(?:Context\s+)?Header:\s*[^\n]+/i,
-                        "*EC Context Header: " + JSON.stringify(newHeader)
-                    );
-                }
-                result += "/EC header -> Set to: \"" + newHeader + "\"\n\n";
-                logEvent("/EC header: " + newHeader);
-            } else if (/^(?:-v|--version|version)\b/i.test(requestTitle)) {
-                const gitHash = (typeof globalThis.INNER_ENTITY_GIT_HASH === "string" && globalThis.INNER_ENTITY_GIT_HASH)
-                    || (typeof EC_BUILD_GIT_HASH === "string" && EC_BUILD_GIT_HASH)
-                    || "f4cfb67";
-                const buildTime = (typeof globalThis.INNER_ENTITY_BUILD_TIME === "string" && globalThis.INNER_ENTITY_BUILD_TIME)
-                    || (typeof EC_BUILD_TIMESTAMP === "string" && EC_BUILD_TIMESTAMP)
-                    || "2026-11-06 05:05 UTC";
-                const isIE = (typeof globalThis.InnerEntity === "function" || typeof globalThis.INNER_ENTITY_BUILD === "string");
-                const buildName = isIE
-                    ? `Inner Entity ${globalThis.INNER_ENTITY_BUILD || "Ver.2_8_0-IE"} [${globalThis.INNER_ENTITY_FLAVOR || "entity"}]`
-                    : `Entity Cards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC`;
-                result += `/${cmdPrefix} version -> ${buildName} (git: ${gitHash}, built: ${buildTime})\n\n`;
-                logEvent(`/${cmdPrefix} version`);
-            } else if (/^(?:info|diag|diagnostics|debug|sysinfo)\b/i.test(requestTitle)) {
-                const inf = (typeof info === "object" && info) ? info : {};
-                const cards = Array.isArray(storyCards) ? storyCards : [];
-                const st = (typeof state === "object" && state) ? state : {};
-
-                const modelStr = inf.storyModel ? `${inf.storyModel.name || "Unknown"}${inf.storyModel.version ? " " + inf.storyModel.version : ""}`.trim() : "Unknown";
-                const cacheStr = inf.useCacheEfficient ? "Enabled (true)" : "Disabled (false)";
-                const maxCharsStr = inf.maxChars ? `${inf.maxChars.toLocaleString()} chars` : "N/A";
-                const turnStr = inf.actionCount ?? "N/A";
-
-                const ieBuild = globalThis.INNER_ENTITY_BUILD || "Not loaded";
-                const ieFlavor = globalThis.INNER_ENTITY_FLAVOR || "N/A";
-                const ieGit = globalThis.INNER_ENTITY_GIT_HASH || "N/A";
-                const ecVersion = typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0";
-                const ecGit = typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f4cfb67";
-
-                const globalsList = [
-                    typeof globalThis.InnerEntity === "function" ? "InnerEntity" : null,
-                    typeof globalThis.InnerSelf === "function" ? "InnerSelf" : null,
-                    typeof globalThis.AutoCards === "function" ? "AutoCards" : null,
-                    typeof globalThis.EntityCards === "function" ? "EntityCards" : null,
-                    typeof globalThis.MainSettings === "function" ? "MainSettings" : null
-                ].filter(Boolean).join(", ") || "None";
-
-                const totalCards = cards.length;
-                const hasMaster = cards.some(c => /Configure\s+Auto-Cards/i.test(c.title || ""));
-                const hasCompanion = cards.some(c => /Configure\s+Entity\s+Cards/i.test(c.title || ""));
-                const hasInnerEntity = cards.some(c => /Configure\s+Inner\s+(?:Entity|Self)/i.test(c.title || ""));
-                const hasTaskCard = cards.some(c => /task\s*[—–-]\s*do\s*not\s*edit/i.test(c.title || ""));
-                const brainCardCount = cards.filter(c => String(c.keys || "").includes("agent") || /brain/i.test(c.type || "")).length;
-                const loreCardCount = cards.filter(c => /{title:/i.test(c.entry || "") || /(?:^|\n)entity:/i.test(c.entry || "")).length;
-
-                const isState = st.InnerSelf;
-                const isEnabled = isState ? (isState.enabled !== false ? "Active" : "Disabled") : (globalThis.InnerEntity ? "Active" : "N/A");
-                const isAgent = isState?.agent || "None (idle)";
-                const isOps = isState?.ops ?? 0;
-
-                const cooldownMax = AC.config.addCardCooldown ?? 28;
-                const cooldownCur = AC.generation.cooldown ?? 0;
-                const updatesVal = AC.config.defaultCardsDoMemoryUpdates ?? false;
-                const bypassVal = AC.config.manualBypassTitleFilters !== false;
-                const filterVal = AC.config.filterCommonEntities !== false;
-
-                result += `/${cmdPrefix} info ->\n`
-                    + `=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n`
-                    + `• Environment:\n`
-                    + `  - Story Model:      ${modelStr}\n`
-                    + `  - Optimize Context: ${cacheStr}\n`
-                    + `  - Max Context:      ${maxCharsStr} | Action Turn: ${turnStr}\n`
-                    + `• Loaded Scripts:\n`
-                    + `  - Inner Entity:     ${ieBuild} [${ieFlavor}] (git: ${ieGit})\n`
-                    + `  - Entity Cards:     Ver.${ecVersion}-EC (git: ${ecGit})\n`
-                    + `  - Active Globals:   ${globalsList}\n`
-                    + `• Engine State:\n`
-                    + `  - Mode: ${AC.config.operatingMode} | Preset: ${AC.config.ECPreset} | Header: "${AC.config.ECContextHeader}"\n`
-                    + `  - Cooldown: ${cooldownCur}/${cooldownMax} | Pending: ${AC.generation.pending.length} | Updates: ${updatesVal}\n`
-                    + `  - Title Bypass: ${bypassVal} | Filter Common: ${filterVal}\n`
-                    + `• Character Minds (Inner Self):\n`
-                    + `  - Status: ${isEnabled} | Active Agent: ${isAgent} | Brain Ops: ${isOps}\n`
-                    + `• Story Cards Overview:\n`
-                    + `  - Total Cards:      ${totalCards} (Lore: ${loreCardCount}, Brains: ${brainCardCount})\n`
-                    + `  - Config Cards:     Master: ${hasMaster ? "Yes" : "No"} | Companion: ${hasCompanion ? "Yes" : "No"} | IE: ${hasInnerEntity ? "Yes" : "No"}\n`
-                    + `  - OC Task Card:     ${hasTaskCard ? "Active" : "None"}\n`
-                    + `=============================================\n\n`;
-                logEvent(`/${cmdPrefix} info`);
-            } else if (/^(?:-h|--help|help|-\?|\?)\b/i.test(requestTitle)) {
-                result += `/${cmdPrefix} help -> Entity Cards Commands:\n`
-                    + `  /${cmdPrefix.toLowerCase()}                       Trigger card generation for recent titles\n`
-                    + `  /${cmdPrefix.toLowerCase()} <Title> [-<type>]     Generate card with optional type flag\n`
-                    + `  /${cmdPrefix.toLowerCase()} <Title> / {Details}   Generate card with custom guidance\n`
-                    + `  /${cmdPrefix.toLowerCase()} redo <Title>          Regenerate an existing card\n`
-                    + `  /${cmdPrefix.toLowerCase()} redo all              Regenerate all automatic story cards\n`
-                    + `  /${cmdPrefix.toLowerCase()} preset <name>         standard | lite | authoring | custom\n`
-                    + `  /${cmdPrefix.toLowerCase()} mode <mode>           entity | classic\n`
-                    + `  /${cmdPrefix.toLowerCase()} header <text>         Set custom context header\n`
-                    + `  /${cmdPrefix.toLowerCase()} info, diag            Display detailed system & script diagnostics\n`
-                    + `  /${cmdPrefix.toLowerCase()} -v, --version         Show script version & git hash\n`
-                    + `  /${cmdPrefix.toLowerCase()} -h, --help            Show this command help\n\n`
-                    + `Type flags: -p (Person), -loc (Location), -org (Organization), -t (Thing), -e (Event)\n`
-                    + `Flags can be placed before or after titles (e.g. /${cmdPrefix.toLowerCase()} -p Molly or /${cmdPrefix.toLowerCase()} Molly -p).\n\n`;
-                logEvent(`/${cmdPrefix} help`);
+                result += `/${cmdPrefix} -> Card generation triggered!\n\n`;
+                logEvent(`/${cmdPrefix}`);
             } else {
-                let rawTitle = requestTitle.replace(/[\s\.\?!:,"”'’]+$/, "");
-                const parsedFlag = parseTypeFlag(rawTitle);
-                const request = {
-                    title: parsedFlag.title,
-                    ...(parsedFlag.entityType ? { entityType: parsedFlag.entityType, type: parsedFlag.entityType } : {})
-                };
-                const redo = (function() {
-                    const redoPattern = /^(?:redo|retry|rewrite|remake)[\s\.\?!:,;"'—\)\]]+\s*/i;
-                    if (redoPattern.test(request.title)) {
-                        request.title = request.title.replace(redoPattern, "");
-                        if (/^(?:all|every)(?:\s|\.|\?|!|:|,|;|"|'|—|\)|\]|$)/i.test(request.title)) {
-                            return [];
-                        } else {
-                            return true;
-                        }
+                const cli = parseCommandLine(requestTitle);
+                if (cli.flags.version) {
+                    const gitHash = (typeof globalThis.INNER_ENTITY_GIT_HASH === "string" && globalThis.INNER_ENTITY_GIT_HASH)
+                        || (typeof EC_BUILD_GIT_HASH === "string" && EC_BUILD_GIT_HASH)
+                        || "f4cfb67";
+                    const buildTime = (typeof globalThis.INNER_ENTITY_BUILD_TIME === "string" && globalThis.INNER_ENTITY_BUILD_TIME)
+                        || (typeof EC_BUILD_TIMESTAMP === "string" && EC_BUILD_TIMESTAMP)
+                        || "2026-11-06 05:05 UTC";
+                    const isIE = (typeof globalThis.InnerEntity === "function" || typeof globalThis.INNER_ENTITY_BUILD === "string");
+                    const buildName = isIE
+                        ? `Inner Entity ${globalThis.INNER_ENTITY_BUILD || "Ver.2_8_0-IE"} [${globalThis.INNER_ENTITY_FLAVOR || "entity"}]`
+                        : `Entity Cards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC`;
+                    result += `/${cmdPrefix} version -> ${buildName} (git: ${gitHash}, built: ${buildTime})\n\n`;
+                    logEvent(`/${cmdPrefix} version`);
+                } else if (cli.flags.help) {
+                    result += `/${cmdPrefix} help -> Entity Cards Commands:\n`
+                        + `  /${cmdPrefix.toLowerCase()}                         Trigger card generation for recent titles\n`
+                        + `  /${cmdPrefix.toLowerCase()} <Title> [-<type>]       Generate card with optional entity type\n`
+                        + `  /${cmdPrefix.toLowerCase()} <Title> / {Details}     Generate card with custom guidance\n`
+                        + `  /${cmdPrefix.toLowerCase()} -r, --redo <Title>      Regenerate an existing card (or legacy "redo <Title>")\n`
+                        + `  /${cmdPrefix.toLowerCase()} -R, --redo-all          Regenerate all automatic story cards (or legacy "redo all")\n`
+                        + `  /${cmdPrefix.toLowerCase()} -m, --mode <mode>       Switch mode: entity | classic\n`
+                        + `  /${cmdPrefix.toLowerCase()} -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n`
+                        + `  /${cmdPrefix.toLowerCase()} --header <text>         Set context header (e.g. --header "Codex Entities:")\n`
+                        + `  /${cmdPrefix.toLowerCase()} -i, --info              Display system, script & memory diagnostics\n`
+                        + `  /${cmdPrefix.toLowerCase()} -v, --version           Show script build version & git hash\n`
+                        + `  /${cmdPrefix.toLowerCase()} -h, --help              Show this command help\n\n`
+                        + `Entity Types: -p, --person | -loc, --location | -org, --organization | -t, --thing | -e, --event\n`
+                        + `Quotes: Any title enclosed in quotes (e.g. /${cmdPrefix.toLowerCase()} "Info" -org) is protected from flag collisions.\n\n`;
+                    logEvent(`/${cmdPrefix} help`);
+                } else if (cli.flags.info) {
+                    const inf = (typeof info === "object" && info) ? info : {};
+                    const cards = Array.isArray(storyCards) ? storyCards : [];
+                    const st = (typeof state === "object" && state) ? state : {};
+
+                    const modelStr = inf.storyModel ? `${inf.storyModel.name || "Unknown"}${inf.storyModel.version ? " " + inf.storyModel.version : ""}`.trim() : "Unknown";
+                    const cacheStr = inf.useCacheEfficient ? "Enabled (true)" : "Disabled (false)";
+                    const maxCharsStr = inf.maxChars ? `${inf.maxChars.toLocaleString()} chars` : "N/A";
+                    const turnStr = inf.actionCount ?? "N/A";
+
+                    const ieBuild = globalThis.INNER_ENTITY_BUILD || "Not loaded";
+                    const ieFlavor = globalThis.INNER_ENTITY_FLAVOR || "N/A";
+                    const ieGit = globalThis.INNER_ENTITY_GIT_HASH || "N/A";
+                    const ecVersion = typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0";
+                    const ecGit = typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f4cfb67";
+
+                    const globalsList = [
+                        typeof globalThis.InnerEntity === "function" ? "InnerEntity" : null,
+                        typeof globalThis.InnerSelf === "function" ? "InnerSelf" : null,
+                        typeof globalThis.AutoCards === "function" ? "AutoCards" : null,
+                        typeof globalThis.EntityCards === "function" ? "EntityCards" : null,
+                        typeof globalThis.MainSettings === "function" ? "MainSettings" : null
+                    ].filter(Boolean).join(", ") || "None";
+
+                    const totalCards = cards.length;
+                    const hasMaster = cards.some(c => /Configure\s+Auto-Cards/i.test(c.title || ""));
+                    const hasCompanion = cards.some(c => /Configure\s+Entity\s+Cards/i.test(c.title || ""));
+                    const hasInnerEntity = cards.some(c => /Configure\s+Inner\s+(?:Entity|Self)/i.test(c.title || ""));
+                    const hasTaskCard = cards.some(c => /task\s*[—–-]\s*do\s*not\s*edit/i.test(c.title || ""));
+                    const brainCardCount = cards.filter(c => String(c.keys || "").includes("agent") || /brain/i.test(c.type || "")).length;
+                    const loreCardCount = cards.filter(c => /{title:/i.test(c.entry || "") || /(?:^|\n)entity:/i.test(c.entry || "")).length;
+
+                    const isState = st.InnerSelf;
+                    const isEnabled = isState ? (isState.enabled !== false ? "Active" : "Disabled") : (globalThis.InnerEntity ? "Active" : "N/A");
+                    const isAgent = isState?.agent || "None (idle)";
+                    const isOps = isState?.ops ?? 0;
+
+                    const cooldownMax = AC.config.addCardCooldown ?? 28;
+                    const cooldownCur = AC.generation.cooldown ?? 0;
+                    const updatesVal = AC.config.defaultCardsDoMemoryUpdates ?? false;
+                    const bypassVal = AC.config.manualBypassTitleFilters !== false;
+                    const filterVal = AC.config.filterCommonEntities !== false;
+
+                    result += `/${cmdPrefix} info ->\n`
+                        + `=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n`
+                        + `• Environment:\n`
+                        + `  - Story Model:      ${modelStr}\n`
+                        + `  - Optimize Context: ${cacheStr}\n`
+                        + `  - Max Context:      ${maxCharsStr} | Action Turn: ${turnStr}\n`
+                        + `• Loaded Scripts:\n`
+                        + `  - Inner Entity:     ${ieBuild} [${ieFlavor}] (git: ${ieGit})\n`
+                        + `  - Entity Cards:     Ver.${ecVersion}-EC (git: ${ecGit})\n`
+                        + `  - Active Globals:   ${globalsList}\n`
+                        + `• Engine State:\n`
+                        + `  - Mode: ${AC.config.operatingMode} | Preset: ${AC.config.ECPreset} | Header: "${AC.config.ECContextHeader}"\n`
+                        + `  - Cooldown: ${cooldownCur}/${cooldownMax} | Pending: ${AC.generation.pending.length} | Updates: ${updatesVal}\n`
+                        + `  - Title Bypass: ${bypassVal} | Filter Common: ${filterVal}\n`
+                        + `• Character Minds (Inner Self):\n`
+                        + `  - Status: ${isEnabled} | Active Agent: ${isAgent} | Brain Ops: ${isOps}\n`
+                        + `• Story Cards Overview:\n`
+                        + `  - Total Cards:      ${totalCards} (Lore: ${loreCardCount}, Brains: ${brainCardCount})\n`
+                        + `  - Config Cards:     Master: ${hasMaster ? "Yes" : "No"} | Companion: ${hasCompanion ? "Yes" : "No"} | IE: ${hasInnerEntity ? "Yes" : "No"}\n`
+                        + `  - OC Task Card:     ${hasTaskCard ? "Active" : "None"}\n`
+                        + `=============================================\n\n`;
+                    logEvent(`/${cmdPrefix} info`);
+                } else if (cli.flags.mode !== undefined) {
+                    const requestedMode = (cli.flags.mode === "ec" ? "entity" : (cli.flags.mode === "ac" ? "classic" : cli.flags.mode));
+                    if (requestedMode === "entity" || requestedMode === "classic") {
+                        applyModeSwitch(requestedMode);
+                        result += `/${cmdPrefix} mode -> Switched to ` + (requestedMode === "entity" ? "Entity Cards" : "Classic Auto-Cards") + "\n\n";
+                        logEvent(`/${cmdPrefix} mode: ` + requestedMode);
                     } else {
-                        return false;
+                        result += `/${cmdPrefix} mode -> Unknown mode "${cli.flags.mode}". Valid modes: entity, classic\n\n`;
+                        logEvent(`/${cmdPrefix} mode: invalid "${cli.flags.mode}"`);
                     }
-                })();
-                if (Array.isArray(redo)) {
-                    // Redo all auto cards
+                } else if (cli.flags.preset !== undefined) {
+                    const reqPreset = cli.flags.preset.toLowerCase();
+                    if (["standard", "lite", "authoring", "custom"].includes(reqPreset)) {
+                        AC.config.ECPreset = reqPreset;
+                        if (EC_PRESETS[reqPreset]) {
+                            AC.config.generationPrompt = EC_PRESETS[reqPreset];
+                        }
+                        const ecTitle = getControlVariants().configureEC.title;
+                        const ecCard = Internal.getCard(card => card && card.title === ecTitle);
+                        if (ecCard) {
+                            ecCard.entry = getECConfigureCardEntry();
+                            ecCard.description = getECConfigureCardDescription();
+                        }
+                        result += `/${cmdPrefix} preset -> Set to ` + (reqPreset[0].toUpperCase() + reqPreset.slice(1)) + "\n\n";
+                        logEvent(`/${cmdPrefix} preset: ` + reqPreset);
+                    } else {
+                        result += `/${cmdPrefix} preset -> Unknown preset "${cli.flags.preset}". Valid presets: standard, lite, authoring, custom\n\n`;
+                        logEvent(`/${cmdPrefix} preset: invalid "${cli.flags.preset}"`);
+                    }
+                } else if (cli.flags.header !== undefined) {
+                    const newHeader = cli.flags.header.trim();
+                    if (newHeader) {
+                        AC.config.ECContextHeader = newHeader;
+                        const cfgTitle = getControlVariants().configure.title;
+                        const cfgCard = Internal.getCard(card => card.title === cfgTitle);
+                        if (cfgCard) {
+                            cfgCard.entry = cfgCard.entry.replace(
+                                /(?:\*EC\s+)?(?:Entity Cards\s+)?(?:Context\s+)?Header:\s*[^\n]+/i,
+                                "*EC Context Header: " + JSON.stringify(newHeader)
+                            );
+                        }
+                        result += `/${cmdPrefix} header -> Set to: "` + newHeader + "\"\n\n";
+                        logEvent(`/${cmdPrefix} header: ` + newHeader);
+                    } else {
+                        result += `/${cmdPrefix} header -> Missing header text argument.\n\n`;
+                        logEvent(`/${cmdPrefix} header: missing`);
+                    }
+                } else if (cli.flags.redoAll) {
                     Internal.getUsedTitles(true);
                     const titleMatchPattern = /^{title: ([\s\S]*?)}/;
-                    redo.push(...Internal.getCard(card => (
+                    const redo = Internal.getCard(card => (
                         titleMatchPattern.test(Internal.SCContainerUnwrap(card.entry))
                         && /{updates: (?:true|false), limit: \d+}/.test(card.description)
-                    ), true));
+                    ), true);
                     let count = 0;
                     for (const card of redo) {
                         const titleMatch = Internal.SCContainerUnwrap(card.entry).match(titleMatchPattern);  
@@ -6578,7 +6718,7 @@ description: {1 concise sentence narrative summary}
                             count++;
                         }
                     }
-                    const parsed = "/AC redo all";
+                    const parsed = `/${cmdPrefix} redo all`;
                     result += parsed + " -> ";
                     if (count === 0) {
                         result += "There were no valid auto-cards to redo";
@@ -6588,45 +6728,64 @@ description: {1 concise sentence narrative summary}
                             result += " Proceed to redo " + count + " cards";
                         }
                     }
+                    result += "\n\n";
                     logEvent(parsed);
-                } else if (!requestDetails) {
-                    // Request with only title
-                    submitRequest("");
-                } else if (!requestEntry || redo) {
-                    // Request with title and details
-                    request.entryPromptDetails = requestDetails;
-                    submitRequest(" / {" + requestDetails + "}");
                 } else {
-                    // Request with title, details, and entry
-                    request.entryPromptDetails = requestDetails;
-                    request.entryStart = requestEntry;
-                    submitRequest(" / {" + requestDetails + "} / {" + requestEntry + "}");
-                }
-                result += "\n\n";
-                function submitRequest(extra) {
-                    request.isManual = true;
-                    O.f(request);
-                    const [type, success] = (function() {
-                        if (redo) {
-                            return [" redo", Internal.redoCard(request, true, "")];
+                    const rawTitle = cli.title;
+                    if (!rawTitle) {
+                        if (cli.flags.entityType) {
+                            result += `/${cmdPrefix} -> Missing entity title for [-${cli.flags.entityType.toLowerCase()}].\n\n`;
+                            logEvent(`/${cmdPrefix} missing title`);
+                        } else if (cli.flags.redo) {
+                            result += `/${cmdPrefix} redo -> Missing card title to regenerate.\n\n`;
+                            logEvent(`/${cmdPrefix} redo missing title`);
                         } else {
-                            Internal.getUsedTitles(true);
-                            return ["", Internal.generateCard(request, ["", ""], true)];
+                            AC.generation.cooldown = 0;
+                            result += `/${cmdPrefix} -> Card generation triggered!\n\n`;
+                            logEvent(`/${cmdPrefix}`);
                         }
-                    })();
-                    const typeTag = parsedFlag.entityType ? " [-" + parsedFlag.entityType.toLowerCase() + "]" : "";
-                    const left = "/" + cmdPrefix + type + " {";
-                    const right = "}" + extra;
-                    if (success) {
-                        const parsed = left + AC.generation.pending[AC.generation.pending.length - 1].title + right + typeTag;
-                        result += parsed + " -> Success!";
-                        logEvent(parsed);
                     } else {
-                        const parsed = left + request.title + right + typeTag;
-                        result += parsed + " -> \"" + request.title + "\" is invalid or unavailable" + typeTag;
-                        logEvent(parsed);
+                        const isRedo = !!cli.flags.redo;
+                        const request = {
+                            title: rawTitle,
+                            ...(cli.flags.entityType ? { entityType: cli.flags.entityType, type: cli.flags.entityType } : {})
+                        };
+                        if (!requestDetails) {
+                            submitRequest("");
+                        } else if (!requestEntry || isRedo) {
+                            request.entryPromptDetails = requestDetails;
+                            submitRequest(" / {" + requestDetails + "}");
+                        } else {
+                            request.entryPromptDetails = requestDetails;
+                            request.entryStart = requestEntry;
+                            submitRequest(" / {" + requestDetails + "} / {" + requestEntry + "}");
+                        }
+                        result += "\n\n";
+                        function submitRequest(extra) {
+                            request.isManual = true;
+                            O.f(request);
+                            const [type, success] = (function() {
+                                if (isRedo) {
+                                    return [" redo", Internal.redoCard(request, true, "")];
+                                } else {
+                                    Internal.getUsedTitles(true);
+                                    return ["", Internal.generateCard(request, ["", ""], true)];
+                                }
+                            })();
+                            const typeTag = cli.flags.entityType ? " [-" + cli.flags.entityType.toLowerCase() + "]" : "";
+                            const left = "/" + cmdPrefix + type + " {";
+                            const right = "}" + extra;
+                            if (success) {
+                                const parsed = left + (AC.generation.pending[AC.generation.pending.length - 1]?.title || request.title) + right + typeTag;
+                                result += parsed + " -> Success!";
+                                logEvent(parsed);
+                            } else {
+                                const parsed = left + request.title + right + typeTag;
+                                result += parsed + " -> \"" + request.title + "\" is invalid or unavailable" + typeTag;
+                                logEvent(parsed);
+                            }
+                        }
                     }
-                    return;
                 }
             }
             if (isPendingGeneration() || isAwaitingGeneration() || isPendingCompression()) {

@@ -48,23 +48,19 @@ You can use either `/ec` or `/ac` in the AI Dungeon action input bar:
 | Command | Description |
 |---|---|
 | `/ec` | Triggers immediate card generation if valid titles exist in recent turns |
-| `/ec mode entity` | Switches the engine to **Entity Cards** mode (NER, YAML schemas, companion card) |
-| `/ec mode classic` | Switches the engine to **Classic Auto-Cards** mode (prose prompt, bulleted lists) |
-| `/ec preset standard` | Activates the **Standard** balanced 5-type YAML preset |
-| `/ec preset lite` | Activates the ultra-compact **Lite** preset (ideal for 8B models) |
-| `/ec preset authoring` | Activates the narrative **Authoring** preset (secrets, motives, scene dynamics) |
-| `/ec preset custom` | Activates the **Custom** preset using your live edited templates |
-| `/ec header <text>` | Sets a custom context header (e.g., `/ec header Codex Entities:`) |
 | `/ec <Title>` | Manually directs card generation for a specific title |
 | `/ec <Title> -<type>` | Generates a card with an explicit entity type flag (e.g. `/ec Smith -p` or `/ec -loc Tokyo`). Optimizes prompt to only that branch (~80% token savings)! |
 | `/ec <Title> / {Details}` | Generates a card for a title with additional guidance details |
-| `/ec redo <Title> [ -<type> ]` | Regenerates an existing story card, optionally overriding its type |
-| `/ec redo all` | Regenerates all automatic story cards |
-| `/ec info, diag` | Displays comprehensive system diagnostics (model, cache, scripts, cooldowns, card counts) |
-| `/ec -v, --version` | Displays active script build version and git commit hash |
+| `/ec -r, --redo <Title> [ -<type> ]` | Regenerates an existing story card, optionally overriding its type (legacy alias: `/ec redo <Title>`) |
+| `/ec -R, --redo-all` | Regenerates all automatic story cards (legacy alias: `/ec redo all`) |
+| `/ec -m, --mode <mode>` | Switches engine mode: `-m entity` (NER, YAML schemas) or `-m classic` (prose prompt, bulleted lists) |
+| `/ec -P, --preset <name>` | Switches YAML schema preset: `-P standard`, `-P lite`, `-P authoring`, or `-P custom` |
+| `/ec --header <text>` | Sets a custom context header (e.g., `/ec --header "Codex Entities:"`) |
+| `/ec -i, --info, --diag` | Displays comprehensive system diagnostics (model, cache, scripts, cooldowns, card counts) |
+| `/ec -v, --version` | Displays active script build version, git commit hash, and build timestamp |
 | `/ec -h, --help` | Displays command help listing and type flag shorthands |
 
-*(Classic `/ac` commands remain 100% compatible and functional.)*
+*(Classic `/ac` commands remain 100% compatible and functional. Because all options use standard POSIX `-` and `--` flags, character names like `"Info"`, `"Mode"`, `"Preset"`, or `"Help"` never collide with command flags. Any token enclosed in quotes is strictly protected as a title.)*
 
 ### Explicit Entity Type Flags (`-<type>`)
 

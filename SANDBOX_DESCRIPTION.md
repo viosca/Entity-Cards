@@ -50,10 +50,10 @@ Roleplay or brainstorm freely with the AI to flesh out an original character, fa
 
 * **4-Letter MBTI Character Profiling:** Person entities include dense MBTI profiles (e.g. `INTJ - Architect`) for instant behavioral grounding in minimal tokens.
 * **Containerized Lore:** Cards are neatly encapsulated inside `{ Entity: ... }` wrappers to prevent format bleed.
-* **Model-Aware Presets:** Automatically detects your active AI Dungeon model and adapts schema complexity (or switch manually via `/ec preset standard`, `lite`, or `authoring`).
+* **Model-Aware Presets:** Automatically detects your active AI Dungeon model and adapts schema complexity (or switch manually via `/ec -P standard`, `-P lite`, or `-P authoring`).
 * **Dialogue Quote Support:** Commands work in Story or Do mode, or spoken naturally in Say mode (e.g. `> You say, "/ec -p Molly."`).
 * **Live In-Game Customization:** You can customize prompt templates directly in-game by editing the description of the "Configure Entity Cards" companion story card.
-* **Classic Auto-Cards Mode:** Toggle back to LewdLeah's classic prose and bulleted lore at any time via `/ec mode classic`.
+* **Classic Auto-Cards Mode:** Toggle back to LewdLeah's classic prose and bulleted lore at any time via `/ec -m classic` (or `/ec -m entity` to return).
 * **Persistent Memory Tracking:** Automated long-term memory logging and summarization for active entities.
 
 ---
@@ -62,8 +62,9 @@ Roleplay or brainstorm freely with the AI to flesh out an original character, fa
 
 * **Response Length Slider:** Setting your in-game **Response Length** slider to **250+ tokens** (in Gameplay Settings) allows complete entity cards to generate in a single turn!
 * **Director Mode:** Open the flame menu (Gameplay Settings) and change your character name to "Author" to freely direct the AI without locking yourself into an in-game persona.
-* **Lightweight Speed:** Type `/ec preset lite` if you want ultra-fast, compact cards (~60 tokens).
-* **Instant System Diagnostics:** Type `/ec info` (or `/ec diag`) at any time to output a full diagnostic report of your story model, prompt cache status, script versions, and card counts.
+* **Lightweight Speed:** Type `/ec -P lite` if you want ultra-fast, compact cards (~60 tokens).
+* **Instant System Diagnostics:** Type `/ec -i` (or `/ec --info`) at any time to output a full diagnostic report of your story model, prompt cache status, script versions, and card counts.
+* **Name Protection:** Any card title can be safely generated without colliding with command names (e.g. `/ec Info`, `/ec Mode`, or quoted `/ec "Info" -org`).
 
 ---
 
