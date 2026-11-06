@@ -1,79 +1,77 @@
-# Entity Cards Testing Sandbox 🧪
-### Interactive Testbed for Automated NER & Living Story Cards
-**An experimental sandbox for Entity Cards / Auto-Cards**  
-**Original engine by LewdLeah ❤️ · Extended by Randy Viosca ([@Random_Variable](https://play.aidungeon.com/profile/Random_Variable))**
+# Entity Cards Testing Sandbox 📇
+
+An interactive live testbed for **Entity Cards** (an extension of Auto-Cards by LewdLeah ❤️, developed by Randy Viosca [@Random_Variable](https://play.aidungeon.com/profile/Random_Variable)).
+
+This scenario is a hands-on playground designed for players, authors, and scenario creators to experiment with automated, token-dense Named Entity Recognition (NER) story cards in real time.
 
 ---
 
-## Welcome to the Sandbox!
+## What is an "Entity"?
 
-This scenario is a live, ready-to-play testing environment for **Entity Cards**—an extension of LewdLeah's Auto-Cards that automatically identifies plot-significant nouns and structures them into living, token-dense YAML story cards.
+Large Language Models often struggle with the abstract concept of a generic "Story Card"—different tools and platforms define cards in wildly inconsistent ways.
 
-### What is an "Entity"?
+However, LLMs possess deep, native training in **Named Entity Recognition (NER)**. In Entity Cards, an Entity is a concrete or abstract noun across 5 calibrated categories:
+* **Person:** Characters, historical figures, NPCs (with archetypes and 4-letter **MBTI** profiles)
+* **Location:** Cities, landmarks, realms, planets, atmospheric settings
+* **Organization:** Factions, megacorps, syndicates, cults, guilds
+* **Thing:** Artifacts, weapons, technology, relics, vehicles
+* **Event:** Battles, crises, operations, historical turning points
 
-Large Language Models often struggle with the abstract concept of a "Story Card" because every platform defines cards differently. However, LLMs have deep, native training in **Named Entity Recognition (NER)**. An Entity is a concrete or abstract noun:
-
-* **Person:** Characters, historical figures, companions, rivals, NPCs (includes 4-letter **MBTI profiles** and archetypes)
-* **Location:** Cities, districts, landmarks, planets, wilderness realms
-* **Organization:** Factions, megacorporations, syndicates, cults, guilds
-* **Thing:** Artifacts, weapons, vehicles, relics, cyberware
-* **Event:** Battles, crises, cyber-attacks, historical turning points
-
-By prompting the model in terms of Entities and structured YAML rather than generic cards, the AI produces dense, plot-grounded lore that directly steers character dialogue, motivations, and scene dynamics.
+By prompting the AI with structured YAML schemas rather than vague card templates, it produces high-density, plot-grounded lore that directly steers NPC motivations, scene dynamics, and character dialogue.
 
 ---
 
-## How to Test in This Sandbox
+## How to Use This Scenario
 
 You can test card generation in three ways:
 
 ### 1. Instant Direct Generation
-Type `/ec` into the action bar for any fictional, historical, or universe-specific entity:
-* `/ec James Bond -p`
-* `/ec -loc Neo-Tokyo`
-* `/ec Arasaka Corporation -org`
+Type `/ec <Name>` into the action input bar for any fictional, historical, or real-world entity:
+* `/ec James Bond`
+* `/ec Richard Nixon`
+* `/ec Lake Michigan`
+* `/ec Cyberpunk Megacorp`
+* `/ec The TARDIS`
+
+### 2. Explicit Entity Type Flags (`-<type>`)
+Target an exact category using `-<type>` (before or after the title) to prune unused prompt schemas, save ~80% in tokens, and eliminate classification guesswork:
+* `/ec James Bond -p` *(or `/ec -p James Bond`)*
+* `/ec Neo-Tokyo -loc`
+* `/ec -org Arasaka`
 * `/ec Excalibur -item`
-* `/ec The Fall of Reach -event`
+* `/ec The Great Calamity -event`
 
-*Tip: Adding an entity type flag (`-p`, `-loc`, `-org`, `-t`, `-e`) isolates that single template branch, cutting prompt tokens by ~80% and preventing the AI from confusing people with places!*
-
-### 2. Collaborative Narrative Authoring
-Roleplay or brainstorm with the AI to develop a new character, place, or faction in your story. Once you are satisfied with the narrative details, type `/ec <Name>` to have the engine compile your story history into a permanent, structured story card.
-
-### 3. Spoken in Dialogue (Say Mode)
-You can even trigger commands inside character speech or 3rd-person flame text:
-* `> You say, "/ec -p Molly Millions."`
-* `Joe says, "/ec -loc Citadel Station!"`
+### 3. Collaborative Narrative Authoring
+Roleplay or brainstorm freely with the AI to flesh out an original character, faction, or mystery. Once you are happy with the details, type `/ec <Name>` to have the engine compile your recent story history into a permanent, structured story card.
 
 ---
 
-## Key Sandbox Highlights
+## Highlights & Sandbox Features
 
-* **MBTI Psychological Profiles:** Character cards automatically generate 4-letter MBTI types (e.g. `INTJ - Architect`) for dense personality grounding in just 4–8 tokens.
-* **Containerized Lore:** Cards are neatly wrapped in `{ Entity: ... }` containers with sentinels to prevent format bleed.
-* **Model-Aware Presets:** Automatically detects your active AI Dungeon model to select the best schema tier:
-  * `/ec preset standard` — Balanced 5-type YAML schema (default)
-  * `/ec preset lite` — Ultra-compact schema (~380 chars, ideal for smaller models)
-  * `/ec preset authoring` — Focused on narrative secrets, motives, and scene dynamics
-* **Live In-Game Customization:** You can customize prompt schemas live by editing the description of the **"Configure Entity Cards"** companion story card.
-* **Dynamic Context Header:** Substitutes `"Named Entities (NER):"` for `"World Lore:"` in context to keep reference material firmly anchored.
-
----
-
-## Tips for Testing
-
-* **Response Length Slider:** Set your in-game **Response Length** slider to **200–250+ tokens** in gameplay settings. This allows complete entity cards to generate cleanly in a single turn. (With shorter token budgets, simply click **Continue** when prompted).
-* **Direct the Story as "Author":** Open the flame menu (Gameplay Settings) and change your character name to `"Author"` to freely prompt the AI without locking yourself into an in-game persona.
-* **Need Instant 1-Turn Cards?** Type `/ec preset lite` to switch to ultra-compact cards that complete in ~60 tokens.
+* **4-Letter MBTI Character Profiling:** Person entities include dense MBTI profiles (e.g. `INTJ - Architect`) for instant behavioral grounding in minimal tokens.
+* **Containerized Lore:** Cards are neatly encapsulated inside `{ Entity: ... }` wrappers to prevent format bleed.
+* **Model-Aware Presets:** Automatically detects your active AI Dungeon model and adapts schema complexity (or switch manually via `/ec preset standard`, `lite`, or `authoring`).
+* **Dialogue Quote Support:** Commands work in Story or Do mode, or spoken naturally in Say mode (e.g. `> You say, "/ec -p Molly."`).
+* **Live In-Game Customization:** You can customize prompt templates directly in-game by editing the description of the "Configure Entity Cards" companion story card.
+* **Classic Auto-Cards Mode:** Toggle back to LewdLeah's classic prose and bulleted lore at any time via `/ec mode classic`.
+* **Persistent Memory Tracking:** Automated long-term memory logging and summarization for active entities.
 
 ---
 
-## Full Documentation & Scenario Installation
+## Tips for Testers & Creators
 
-This sandbox is pre-configured and ready to play. If you would like to install Entity Cards into your own custom scenarios, read the complete command reference, or review the underlying script:
+* **Response Length Slider:** Setting your in-game **Response Length** slider to **250+ tokens** (in Gameplay Settings) allows complete entity cards to generate in a single turn!
+* **Director Mode:** Open the flame menu (Gameplay Settings) and change your character name to "Author" to freely direct the AI without locking yourself into an in-game persona.
+* **Lightweight Speed:** Type `/ec preset lite` if you want ultra-fast, compact cards (~60 tokens).
 
-* **Full Script Documentation:** [SCENARIO_DESCRIPTION.md](https://github.com/viosca/Entity-Cards/blob/main/SCENARIO_DESCRIPTION.md)
+---
+
+## Full Script Documentation & Source Code
+
+For the complete command manual, advanced configuration guide, and full script installation instructions for your own scenarios, see:
+* **Scenario Script Guide:** [SCENARIO_DESCRIPTION.md](https://github.com/viosca/Entity-Cards/blob/main/SCENARIO_DESCRIPTION.md)
 * **Entity Cards GitHub:** [github.com/viosca/Entity-Cards](https://github.com/viosca/Entity-Cards)
-* **Inner Entity GitHub:** [github.com/viosca/Inner-Entity](https://github.com/viosca/Inner-Entity)
-* **Creator Profile:** [play.aidungeon.com/profile/Random_Variable](https://play.aidungeon.com/profile/Random_Variable)
+* **Inner Entity (Minds + Entities):** [github.com/viosca/Inner-Entity](https://github.com/viosca/Inner-Entity)
 * **Original Auto-Cards by LewdLeah:** [play.aidungeon.com/scenario/Ddt0Akd-lVtj/auto-cards](https://play.aidungeon.com/scenario/Ddt0Akd-lVtj/auto-cards)
+
+*Note: The generation prompts and schemas in this scenario are actively evolving and tested here. Feel free to experiment, tweak settings in the configuration cards, and have fun!*
