@@ -393,15 +393,24 @@ description: {1 concise sentence narrative summary}
     };
 
     /**
-     * Parses command-line tokens, POSIX/GNU flags (-v, -h, -i, -m, -P, --header, -r, -R, type flags),
-     * and separates them cleanly from positional title tokens.
-     * Tokens enclosed in quotes (straight or curly) are always treated as titles.
-     * @param {string} str Raw command-line string
-     * @returns {{ flags: Object, title: string }}
+     * Tokenizes a command line string respecting single/double/smart quotes,
+     * normalizing smart dashes, and preserving quoted literals.
+     * 
+     * @param {string} input Raw command line string
+     * @returns {Array<{ text: string, isQuoted: boolean }>} Array of tokens
      */
-    function parseCommandLine(str) {
-        if (!str || typeof str !== "string") {
-            return { flags: {}, title: "" };
+    function tokenizeCommandLine(input) {
+        if (!input || typeof input !== "string") return [];
+
+        let str = input.trim();
+        // AID dialogue wrapper: e.g. > You say, "..." or Joe says, "..."
+        const sayMatch = str.match(/(?:^|\n)(?:>\s*)?(?:You|[A-Za-z0-9_]+)\s*(?:says?|asks?|exclaims?|shouts?),?\s*["“]([\s\S]*?)["”]\s*$/i);
+        if (sayMatch) {
+            str = sayMatch[1].trim();
+        }
+        // Clean trailing speech/sentence punctuation at end of command (preserving -? and closing quotes)
+        if (str !== "-?" && str !== "--?") {
+            str = str.replace(/(?<=\S)[.!?,;:)]+$/, "");
         }
 
         const tokens = [];
@@ -412,120 +421,205 @@ description: {1 concise sentence narrative summary}
             const isQuoted = (match[5] === undefined);
             tokens.push({ text: val, isQuoted });
         }
+        return tokens;
+    }
+
+    /**
+     * POSIX and GNU-style option parser for AI Dungeon commands.
+     * 
+     * @param {string|Array} input String or pre-tokenized array
+     * @param {Object} spec Declarative options specification
+     * @returns {{ flags: Object, operands: Array<string>, target: string, errors: Array<string>, hasFlag: Function }}
+     */
+    function getoptLong(input, spec = {}) {
+        const tokens = Array.isArray(input)
+            ? input.map(t => (typeof t === "string" ? { text: t, isQuoted: false } : t))
+            : tokenizeCommandLine(input);
+
+        const lookupExact = new Map();
+        const lookupLower = new Map();
+
+        for (const [key, def] of Object.entries(spec)) {
+            const entry = { key, def };
+            lookupLower.set(`--${key.toLowerCase()}`, entry);
+            lookupLower.set(`-${key.toLowerCase()}`, entry);
+
+            if (def.short) {
+                lookupExact.set(`-${def.short}`, entry);
+                lookupExact.set(`--${def.short}`, entry);
+            }
+
+            if (Array.isArray(def.aliases)) {
+                for (const alias of def.aliases) {
+                    lookupLower.set(`--${alias.toLowerCase()}`, entry);
+                    lookupLower.set(`-${alias.toLowerCase()}`, entry);
+                    if (alias.length === 1) {
+                        lookupExact.set(`-${alias}`, entry);
+                    }
+                }
+            }
+        }
 
         const flags = {};
-        const titleParts = [];
+        const operands = [];
+        const errors = [];
+        let endOfOptions = false;
+
+        for (const [key, def] of Object.entries(spec)) {
+            if (def.default !== undefined) {
+                flags[key] = def.default;
+            }
+        }
 
         for (let i = 0; i < tokens.length; i++) {
             let { text, isQuoted } = tokens[i];
 
-            if (isQuoted) {
-                titleParts.push(text);
+            if (isQuoted || endOfOptions) {
+                operands.push(text);
                 continue;
             }
 
-            // Normalize Unicode smart dashes (en-dash, em-dash) at start of flag tokens
+            if (text === "--") {
+                endOfOptions = true;
+                continue;
+            }
+
+            // Legacy compatibility for LewdLeah unflagged "redo" / "retry" / "rewrite" / "remake"
+            if (i === 0 && /^(?:redo|retry|rewrite|remake)$/i.test(text)) {
+                if (tokens[i + 1] && /^(?:all|every)$/i.test(tokens[i + 1].text)) {
+                    flags.redoAll = true;
+                    i++;
+                    continue;
+                } else {
+                    flags.redo = true;
+                    continue;
+                }
+            }
+
+            // Normalize mobile smart dashes (en-dash, em-dash)
             if (/^[—–]/.test(text)) {
                 text = text.replace(/^[—–]{2}/, "--").replace(/^[—–]/, "-");
             }
 
-            // Clean trailing punctuation on flags (e.g. -p. or -person!) while preserving -?
+            // Clean trailing punctuation on flags while preserving -?
             const cleanFlag = (text === "-?" || text === "--?") ? text : text.replace(/(?<=\w)[.!?,;:"”'’)]+$/, "");
 
-            // Version: -v, --version, -version
-            if (/^(?:--version|-version|-v)$/i.test(cleanFlag)) {
-                flags.version = true;
+            if (!cleanFlag.startsWith("-")) {
+                operands.push(text);
                 continue;
             }
 
-            // Help: -h, --help, -help, -?
-            if (/^(?:--help|-help|-h|-\?)$/i.test(cleanFlag)) {
-                flags.help = true;
+            // Inline value: --flag=value or -f=value
+            let flagName = cleanFlag;
+            let inlineVal = null;
+            const eqIdx = cleanFlag.indexOf("=");
+            if (eqIdx !== -1) {
+                flagName = cleanFlag.slice(0, eqIdx);
+                inlineVal = cleanFlag.slice(eqIdx + 1).replace(/^["“'’]|["”'’]$/g, "");
+            }
+
+            let matched = lookupExact.get(flagName) || lookupLower.get(flagName.toLowerCase());
+
+            if (!matched) {
+                operands.push(text);
                 continue;
             }
 
-            // Info / Diag: -i, --info, -info, --diag, -diag, --diagnostics, --debug, --sysinfo
-            if (/^(?:--info|-info|-i|--diag|-diag|--diagnostics|--debug|--sysinfo)$/i.test(cleanFlag)) {
-                flags.info = true;
+            const { key, def } = matched;
+            const optType = def.type || (def.hasArg ? "string" : "boolean");
+
+            if (optType === "boolean") {
+                flags[key] = true;
                 continue;
             }
 
-            // Mode: -m <val>, --mode <val>, --mode=<val>, -m=<val>
-            if (/^(?:--mode=|-mode=|-m=)(.*)$/i.test(cleanFlag)) {
-                flags.mode = cleanFlag.replace(/^(?:--mode=|-mode=|-m=)/i, "").toLowerCase();
+            if (optType === "typeFlag") {
+                flags[key] = true;
+                if (def.entityType) {
+                    flags.entityType = def.entityType;
+                    flags.matchedAlias = flagName.replace(/^-{1,2}/, "").toLowerCase();
+                }
                 continue;
             }
-            if (/^(?:--mode|-mode|-m)$/i.test(cleanFlag)) {
-                if (i + 1 < tokens.length && !tokens[i + 1].text.startsWith("-")) {
-                    flags.mode = tokens[++i].text.toLowerCase();
+
+            let val = inlineVal;
+            if (val === null) {
+                if (i + 1 < tokens.length && (!tokens[i + 1].text.startsWith("-") || tokens[i + 1].isQuoted)) {
+                    val = tokens[++i].text;
+                } else if (def.optionalArg) {
+                    val = true;
                 } else {
-                    flags.mode = "";
+                    errors.push(`Missing argument for option ${flagName}`);
+                    flags[key] = "";
+                    continue;
                 }
-                continue;
             }
 
-            // Preset: -P <val>, --preset <val>, --preset=<val>, -P=<val> (case-sensitive -P to distinguish from -p person)
-            if (/^(?:--preset=|-preset=|-P=)(.*)$/i.test(cleanFlag)) {
-                flags.preset = cleanFlag.replace(/^(?:--preset=|-preset=|-P=)/i, "").toLowerCase();
-                continue;
-            }
-            if (/^(?:--preset|-preset|-P)$/.test(cleanFlag) || /^--preset$/i.test(cleanFlag)) {
-                if (i + 1 < tokens.length && !tokens[i + 1].text.startsWith("-")) {
-                    flags.preset = tokens[++i].text.toLowerCase();
-                } else {
-                    flags.preset = "";
-                }
-                continue;
+            if (optType === "number") {
+                const num = Number(val);
+                flags[key] = isNaN(num) ? val : num;
+            } else if (optType === "string") {
+                flags[key] = String(val);
+            } else {
+                flags[key] = val;
             }
 
-            // Header: --header <val>, --header=<val>
-            if (/^(?:--header=|-header=)(.*)$/i.test(cleanFlag)) {
-                flags.header = cleanFlag.replace(/^(?:--header=|-header=)/i, "").replace(/^["“'’]|["”'’]$/g, "");
-                continue;
+            if (Array.isArray(def.enum) && !def.enum.includes(flags[key])) {
+                errors.push(`Invalid value '${flags[key]}' for ${flagName}. Expected: ${def.enum.join(", ")}`);
             }
-            if (/^(?:--header|-header)$/i.test(cleanFlag)) {
-                const headerTokens = [];
-                while (i + 1 < tokens.length && !tokens[i + 1].text.startsWith("-")) {
-                    headerTokens.push(tokens[++i].text);
-                }
-                flags.header = headerTokens.join(" ").trim();
-                continue;
-            }
-
-            // Redo All: -R, --redo-all, -redo-all, or legacy "redo all" / "retry all" / "rewrite all" / "remake all"
-            if (/^(?:--redo-all|-redo-all|-R)$/.test(cleanFlag) || /^--redo-all$/i.test(cleanFlag) || (i === 0 && /^(?:redo|retry|rewrite|remake)$/i.test(cleanFlag) && tokens[i + 1] && /^(?:all|every)$/i.test(tokens[i + 1].text))) {
-                flags.redoAll = true;
-                if (/^(?:redo|retry|rewrite|remake)$/i.test(cleanFlag)) i++;
-                continue;
-            }
-
-            // Redo single: -r, --redo, -r=<title>, --redo=<title>, or legacy "redo" / "retry" / "rewrite" / "remake"
-            if (/^(?:--redo=|-redo=|-r=)(.*)$/i.test(cleanFlag)) {
-                flags.redo = true;
-                const target = cleanFlag.replace(/^(?:--redo=|-redo=|-r=)/i, "").trim();
-                if (target) titleParts.push(target);
-                continue;
-            }
-            if (/^(?:--redo|-redo|-r)$/i.test(cleanFlag) || (i === 0 && /^(?:redo|retry|rewrite|remake)$/i.test(cleanFlag))) {
-                flags.redo = true;
-                continue;
-            }
-
-            // Entity Type flags: -p, --person, -loc, etc.
-            const typeMatch = cleanFlag.match(/^(?:--|-)(p|person|char|character|npc|who|l|loc|location|place|where|o|org|organization|faction|group|guild|t|thing|item|object|what|e|event|incident|when)$/i);
-            if (typeMatch) {
-                const alias = typeMatch[1].toLowerCase();
-                flags.entityType = TYPE_ALIAS_MAP[alias];
-                flags.matchedAlias = alias;
-                continue;
-            }
-
-            titleParts.push(text);
         }
 
         return {
             flags,
-            title: titleParts.join(" ").trim()
+            operands,
+            target: operands.join(" ").trim(),
+            errors,
+            hasFlag: (name) => flags[name] !== undefined && flags[name] !== false
+        };
+    }
+
+    /**
+     * Declarative specification for Entity-Cards / Auto-Cards commands.
+     */
+    const EC_COMMAND_SPEC = {
+        version: { short: "v", type: "boolean" },
+        help:    { short: "h", aliases: ["?"], type: "boolean" },
+        info:    { short: "i", aliases: ["diag", "diagnostics", "debug", "sysinfo"], type: "boolean" },
+        mode:    { short: "m", type: "string", enum: ["entity", "classic"] },
+        preset:  { short: "P", type: "string", enum: ["standard", "lite", "authoring", "custom"] },
+        header:  { type: "string" },
+        redo:    { short: "r", type: "string", optionalArg: true },
+        redoAll: { short: "R", aliases: ["redo-all"], type: "boolean" },
+
+        // Entity Types
+        person:       { short: "p", aliases: ["char", "character", "npc", "who"], type: "typeFlag", entityType: "Person" },
+        location:     { short: "l", aliases: ["loc", "place", "where"], type: "typeFlag", entityType: "Location" },
+        organization: { short: "o", aliases: ["org", "faction", "group", "guild"], type: "typeFlag", entityType: "Organization" },
+        thing:        { short: "t", aliases: ["item", "object", "what"], type: "typeFlag", entityType: "Thing" },
+        event:        { short: "e", aliases: ["incident", "when"], type: "typeFlag", entityType: "Event" }
+    };
+
+    /**
+     * Parses command-line tokens, POSIX/GNU flags (-v, -h, -i, -m, -P, --header, -r, -R, type flags),
+     * and separates them cleanly from positional title tokens using getoptLong().
+     * Tokens enclosed in quotes (straight or curly) are always treated as titles.
+     * @param {string} str Raw command-line string
+     * @returns {{ flags: Object, title: string, operands: Array<string>, errors: Array<string> }}
+     */
+    function parseCommandLine(str) {
+        if (!str || typeof str !== "string") {
+            return { flags: {}, title: "" };
+        }
+        const res = getoptLong(str, EC_COMMAND_SPEC);
+        let title = res.target;
+        if (typeof res.flags.redo === "string" && !title) {
+            title = res.flags.redo;
+        }
+        return {
+            flags: res.flags,
+            title: title,
+            operands: res.operands,
+            errors: res.errors
         };
     }
 
@@ -1385,6 +1479,23 @@ description: {1 concise sentence narrative summary}
             // AutoCards was (probably) called without arguments, return an external API to allow other script creators to programmatically govern the behavior of Auto-Cards from elsewhere within their own scripts
             CODOMAIN.initialize({API: O.f(Object.fromEntries(Object.entries({
                 // Call these API functions like so: AutoCards().API.nameOfFunction(argumentsOfFunction)
+                /*** POSIX and GNU-style option parser for AI Dungeon commands
+                * @function
+                * @param {string|Array} input String or pre-tokenized array
+                * @param {Object} spec Declarative options specification
+                * @returns {{ flags: Object, operands: Array<string>, target: string, errors: Array<string>, hasFlag: Function }}
+                */
+                getoptLong: function(input, spec) {
+                    return getoptLong(input, spec);
+                },
+                /*** Tokenizes command line string respecting single/double/smart quotes
+                * @function
+                * @param {string} input Raw command line string
+                * @returns {Array<{ text: string, isQuoted: boolean }>}
+                */
+                tokenizeCommandLine: function(input) {
+                    return tokenizeCommandLine(input);
+                },
                 /*** Parses command-line tokens, POSIX/GNU flags, and title tokens
                 * @function
                 * @param {string} input Raw command-line string
@@ -5050,6 +5161,12 @@ description: {1 concise sentence narrative summary}
 
         static getSingleTypePrompt(fullPrompt, targetType) {
             return getSingleTypePrompt(fullPrompt, targetType);
+        }
+        static getoptLong(input, spec) {
+            return getoptLong(input, spec);
+        }
+        static tokenizeCommandLine(input) {
+            return tokenizeCommandLine(input);
         }
         static parseCommandLine(input) {
             return parseCommandLine(input);
