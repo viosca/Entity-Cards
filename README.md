@@ -27,7 +27,7 @@ You can switch between **Entity Cards** mode and **Classic Auto-Cards** mode at 
   * **"Configure Auto-Cards" (Master):** Engine controls, cooldowns, turn delays, memory limits, and operating mode switcher (~18 lines).
   * **"Configure Entity Cards" (Companion):** Entity status, active presets, container sentinels, and live editable template blocks.
 * **Card Persistence Guarantee:** When switched to Classic Auto-Cards mode, `Configure Entity Cards` is **never deleted**. It is safely preserved and marked `> Status: Inactive`. Switching back restores it seamlessly.
-* **Named Entity Recognition (NER) Schemas:** Calibrated YAML schemas for 5 entity categories (`Person`, `Location`, `Organization`, `Thing`, and `Event`), designed to fit neatly under AI Dungeon's default **100-token slider** in a single turn.
+* **Named Entity Recognition (NER) Schemas:** Calibrated YAML schemas for 5 entity categories (`Person`, `Location`, `Organization`, `Thing`, and `Event`), designed to fit neatly under AI Dungeon's default **100-token slider** in a single turn. `Person` schemas include 4-letter **MBTI profiles** for dense psychological grounding in minimal tokens.
 * **Model Awareness & Presets:** Automatically detects your active AI Dungeon model (`info.storyModel.name`) and selects the optimal schema tier:
   * **Standard (Default):** Balanced 5-type YAML schemas for mid-to-large models (DeepSeek, GLM, Gemma, Hearthfire, Equinox).
   * **Lite:** Ultra-compact schemas (~380 chars) for lightweight models (Fable, Muse, Wayfarer Small).
@@ -80,7 +80,27 @@ When manually generating or redoing a card, you can specify the entity type usin
 * `/ec The Great Calamity -e`
 * `/ec redo Jack -person`
 
-> **Token Optimization:** When an entity flag is provided, Entity-Cards dynamically isolates only the single matching JellyFish template branch, discarding the other 4 branches. This reduces the AI prompt from ~2,713 characters (~550 tokens) down to ~540 characters (~125 tokens)—an **~80% prompt token reduction** while eliminating schema hallucination! Hyphenated names (e.g., `Spider-Man` or `Top-Secret Facility`) are safely preserved.
+> **Token Optimization:** When an entity flag is provided, Entity-Cards dynamically isolates only the single matching JellyFish template branch, discarding the other 4 branches. This reduces the AI prompt from ~2,713 characters (~550 tokens) down to ~640 characters (~130 tokens)—an **~75–80% prompt token reduction** while eliminating schema hallucination! Hyphenated names (e.g., `Spider-Man` or `Top-Secret Facility`) are safely preserved.
+>
+> **Dialogue & Flame Menu Support:** Commands can be typed directly into Story or Do mode, or spoken naturally in Say mode dialogue (e.g. `> You say, "/ec -p Molly."` or `Joe says, "/ec -loc Citadel!"`). Punctuation, smart quotes, and dialogue wrappers are automatically stripped.
+
+### Sample Generated Entity Card
+
+Here is an example of a generated `Person` entity card using the default `Standard` preset:
+
+```yaml
+{ Entity:
+entity: Molly Millions
+type: Person
+category: Street Samurai
+mbti: ISTP - Virtuoso
+appearance: Mirrored cybernetic lens implants, black leather jacket, retractable razor blades beneath burgundy nails.
+personality: Cynical, calculating, and dryly sarcastic; hypervigilant in social settings.
+drive: Survive freelance gigs and settle an old debt with the Chiba syndicate.
+connections: Former bodyguard for Tessier-Ashpool; uneasy mercenary partner to the protagonist.
+description: A legendary street samurai with cybernetic enhancements who navigates the criminal underworld with razor precision.
+}
+```
 
 ---
 
