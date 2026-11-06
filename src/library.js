@@ -2,11 +2,32 @@
 /// <reference lib="es2022"/>
 // Your "Library" tab should look like this
 
+// ============================================================================
+//
+//                             USE THIS VERSION
+//
+//                        Entity Cards (Ver.2_8_0-EC)
+//
+//   Build Generation: 2026-11-06 05:02:38 UTC
+//   Engine Flavor:    Entity-Cards (Standalone NER & Story Card Engine)
+//
+//   Paste this whole file as your ENTIRE "Library" tab. Replace what is there,
+//   do not add to it. If an older copy is left anywhere below,
+//   JavaScript silently lets the later copy win and this one never runs.
+//
+//   Originally created as Auto-Cards by LewdLeah (May 21, 2025).
+//   Forked and expanded as Entity Cards by Randy Viosca (@Random_Variable).
+//
+// ============================================================================
+
 /*
 Auto-Cards / Entity Cards
 Originally made by LewdLeah on May 21, 2025
 Forked and expanded as "Entity Cards" by Randy Viosca (@Random_Variable on AI Dungeon)
+- Build Generation: 2026-11-06 05:02:38 UTC
+- Engine Flavor: Entity-Cards (Standalone NER & Story Card Engine)
 - Named Entity Recognition (NER) and automatic story card typing (Person, Organization, Location, Event, Thing)
+- 4-letter MBTI psychological profiles for characters
 - JellyFish (JFSH) structured AI pseudo-language generation prompts
 - Story card containerization / encapsulation and sentinels
 - Raw AI prompt and response modes
