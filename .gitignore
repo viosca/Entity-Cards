@@ -18,4 +18,5 @@ Thumbs.db
 
 # Scratch testing scripts & local experiments
 scratch/
+adventure-*.json
 

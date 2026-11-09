@@ -1,0 +1,17 @@
+{
+  "name": "auto-cards",
+  "version": "2.8.0",
+  "description": "Auto-Cards / Entity-Cards: Autonomous story card engine for AI Dungeon",
+  "main": "src/library.js",
+  "scripts": {
+    "test": "node test/test_getopt_aid.js && node test/test_autocards_lifecycle.js"
+  },
+  "keywords": [
+    "ai-dungeon",
+    "story-cards",
+    "entity-cards",
+    "interactive-fiction"
+  ],
+  "author": "LewdLeah & Randy Viosca",
+  "license": "MIT"
+}
