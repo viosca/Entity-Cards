@@ -6680,11 +6680,13 @@ description: {1 concise sentence narrative summary}
                 logEvent(`/${cmdPrefix}`);
             } else {
                 const cli = parseCommandLine(requestTitle);
-                const getoptDiag = (typeof globalThis.GetoptAID?.diag === "function")
-                    ? globalThis.GetoptAID.diag()
-                    : (typeof globalThis.AID_MODULES?.["getopt-aid"]?.diag === "function"
-                        ? globalThis.AID_MODULES["getopt-aid"].diag()
-                        : "GetoptAID v1.0.0");
+                const getoptDiag = (typeof globalThis.AIDGetopt?.diag === "function")
+                    ? globalThis.AIDGetopt.diag()
+                    : (typeof globalThis.GetoptAID?.diag === "function")
+                        ? globalThis.GetoptAID.diag()
+                        : (typeof (globalThis.AID_MODULES?.["aid-getopt"] || globalThis.AID_MODULES?.["getopt-aid"])?.diag === "function"
+                            ? (globalThis.AID_MODULES["aid-getopt"] || globalThis.AID_MODULES["getopt-aid"]).diag()
+                            : "AID-Getopt v1.0.0");
                 if (cli.flags.version) {
                     const gitHash = (typeof globalThis.INNER_ENTITY_GIT_HASH === "string" && globalThis.INNER_ENTITY_GIT_HASH)
                         || (typeof EC_BUILD_GIT_HASH === "string" && EC_BUILD_GIT_HASH)

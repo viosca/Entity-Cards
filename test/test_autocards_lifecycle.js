@@ -77,8 +77,8 @@ console.log(`   ✔ AMS registration verified: ${mod.diag()}`);
 {
     const out = sandbox.AutoCards("input", "/ec -v");
     assert(out.includes("/EC version ->"), "Expected version response for /ec -v");
-    assert(out.includes("Parser: GetoptAID"), "Expected GetoptAID reference in version");
-    console.log("   ✔ /ec -v displays version and GetoptAID diagnostics");
+    assert(out.includes("Parser: AID-Getopt") || out.includes("Parser: GetoptAID"), "Expected parser reference in version");
+    console.log("   ✔ /ec -v displays version and AID-Getopt diagnostics");
 
     const outLong = sandbox.AutoCards("input", "/ec --version");
     assert(outLong.includes("/EC version ->"), "Expected version response for /ec --version");

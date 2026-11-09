@@ -4,7 +4,7 @@
   "description": "Auto-Cards / Entity-Cards: Autonomous story card engine for AI Dungeon",
   "main": "src/library.js",
   "scripts": {
-    "test": "node test/test_getopt_aid.js && node test/test_autocards_lifecycle.js"
+    "test": "node test/test_aid_getopt.js && node test/test_autocards_lifecycle.js"
   },
   "keywords": [
     "ai-dungeon",

@@ -1,8 +1,9 @@
 const assert = require("assert");
-const GetoptAID = require("../submodules/getopt-aid/src/getopt-aid");
+const AIDGetopt = require("../submodules/aid-getopt/src/aid-getopt");
+const GetoptAID = AIDGetopt;
 
 console.log("==================================================================");
-console.log("  TESTING STANDALONE GetoptAID LIBRARY");
+console.log("  TESTING STANDALONE AID-Getopt LIBRARY");
 console.log("==================================================================");
 
 // Spec for general testing
@@ -161,5 +162,5 @@ const TEST_SPEC = {
 }
 
 console.log("\n==================================================================");
-console.log("  🎉 ALL 10 GetoptAID UNIT TESTS PASSED (100% SUCCESS)");
+console.log("  🎉 ALL 10 AID-Getopt UNIT TESTS PASSED (100% SUCCESS)");
 console.log("==================================================================");
