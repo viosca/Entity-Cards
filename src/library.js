@@ -4109,7 +4109,7 @@ description: {1 concise sentence narrative summary}
                             AC.generation.workpiece.type = entityType;
                             return 0;
                         }
-                        return estimateRemainingGens();
+                        return skip(estimateRemainingGens());
                     }
 
                     // NOT! AI RAW RESPONSE MODE:
