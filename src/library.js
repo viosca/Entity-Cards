@@ -6794,10 +6794,16 @@ description: {1 concise sentence narrative summary}
                     }
                 } else if (cli.flags.preset !== undefined) {
                     const reqPreset = cli.flags.preset.toLowerCase();
-                    if (["standard", "lite", "authoring", "custom"].includes(reqPreset)) {
-                        AC.config.ECPreset = reqPreset;
-                        if (EC_PRESETS[reqPreset]) {
-                            AC.config.generationPrompt = EC_PRESETS[reqPreset];
+                    if (reqPreset === "auto" || ["standard", "lite", "authoring", "custom"].includes(reqPreset)) {
+                        if (reqPreset === "auto") {
+                            AC.config.ECAutoPreset = true;
+                            AC.config.ECPreset = detectModelTier();
+                        } else {
+                            AC.config.ECAutoPreset = false;
+                            AC.config.ECPreset = reqPreset;
+                        }
+                        if (EC_PRESETS[AC.config.ECPreset]) {
+                            AC.config.generationPrompt = EC_PRESETS[AC.config.ECPreset];
                         }
                         const ecTitle = getControlVariants().configureEC.title;
                         const ecCard = Internal.getCard(card => card && card.title === ecTitle);
@@ -6805,10 +6811,10 @@ description: {1 concise sentence narrative summary}
                             ecCard.entry = getECConfigureCardEntry();
                             ecCard.description = getECConfigureCardDescription();
                         }
-                        result += `/${cmdPrefix} preset -> Set to ` + (reqPreset[0].toUpperCase() + reqPreset.slice(1)) + "\n\n";
+                        result += `/${cmdPrefix} preset -> Set to ` + (AC.config.ECPreset[0].toUpperCase() + AC.config.ECPreset.slice(1)) + "\n\n";
                         logEvent(`/${cmdPrefix} preset: ` + reqPreset);
                     } else {
-                        result += `/${cmdPrefix} preset -> Unknown preset "${cli.flags.preset}". Valid presets: standard, lite, authoring, custom\n\n`;
+                        result += `/${cmdPrefix} preset -> Unknown preset "${cli.flags.preset}". Valid presets: standard, lite, authoring, custom, auto\n\n`;
                         logEvent(`/${cmdPrefix} preset: invalid "${cli.flags.preset}"`);
                     }
                 } else if (cli.flags.header !== undefined) {
