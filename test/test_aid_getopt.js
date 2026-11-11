@@ -1,5 +1,10 @@
+const fs = require("fs");
+const path = require("path");
 const assert = require("assert");
-const AIDGetopt = require("../submodules/aid-getopt/src/aid-getopt");
+
+const submodulePath = path.resolve(__dirname, "../submodules/aid-getopt/src/aid-getopt.js");
+const siblingPath = path.resolve(__dirname, "../../aid-getopt/src/aid-getopt.js");
+const AIDGetopt = fs.existsSync(submodulePath) ? require(submodulePath) : require(siblingPath);
 const GetoptAID = AIDGetopt;
 
 console.log("==================================================================");
