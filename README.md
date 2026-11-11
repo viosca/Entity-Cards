@@ -1,5 +1,7 @@
 # Entity Cards
 
+![Entity Cards Hero Banner](assets/hero-banner.png)
+
 **An extension of [Auto-Cards](https://github.com/LewdLeah/Auto-Cards) by LewdLeah ❤️**
 
 ---
