@@ -2,6 +2,9 @@
 
 ![Entity Cards Hero Banner](assets/hero-banner.png)
 
+### *LewdLeah's Auto-Cards with Named Entity Recognition (NER)*
+
+[![Engine: Auto-Cards](https://img.shields.io/badge/engine-Auto--Cards%20by%20LewdLeah-ff69b4.svg)](https://github.com/LewdLeah/Auto-Cards)
 [![Specification: AMS v1.1.0](https://img.shields.io/badge/spec-AMS%20v1.1.0-purple.svg)](https://github.com/viosca/aid-modules/blob/main/SPECIFICATION.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
