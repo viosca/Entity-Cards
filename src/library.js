@@ -8020,7 +8020,7 @@ const EntityCards = AutoCards;
 try { globalThis.AutoCards = AutoCards; } catch (_) {}
 try { globalThis.EntityCards = AutoCards; } catch (_) {}
 try {
-    (globalThis.AID_MODULES ??= {})["entity-cards"] = {
+    const _ecm = {
         name: "EntityCards",
         version: typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0",
         gitHash: typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f4cfb67",
@@ -8033,6 +8033,9 @@ try {
         help: () => "Entity Cards Commands:\n  /ec <Title> [-<type>]       Generate card with optional entity type\n  /ec <Title> / {Details}     Generate card with custom guidance\n  /ec -r, --redo <Title>      Regenerate an existing card\n  /ec -R, --redo-all          Regenerate all automatic story cards\n  /ec -m, --mode <mode>       Switch mode: entity | classic\n  /ec -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n  /ec -i, --info              Display system, script & memory diagnostics\n  /ec -v, --version           Show script build version & git hash\n  /ec -h, --help              Show command help",
         diag: () => `EntityCards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC`
     };
+    (globalThis.AID_MODULES ??= {})["entity-cards"] = _ecm;
+    if (typeof state !== "undefined") (state._aid_modules ??= {})["entity-cards"] = _ecm;
+    if (typeof globalThis.AID?.register === "function") globalThis.AID.register(_ecm);
 } catch (_) {}
 function isolateLSIv2(code, log, text, stop) { const console = Object.freeze({log}); try { eval(code); return [null, text, stop]; } catch (error) { return [error, text, stop]; } }
 
