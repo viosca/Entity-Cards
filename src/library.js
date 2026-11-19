@@ -44,21 +44,6 @@ function AutoCards(inHook, inText, inStop) {
         }
         return inText;
     }
-    // Guard against duplicate execution within the same turn (e.g. Slot 1 + InnerEntity caller)
-    const turnId = `${typeof info === "object" ? (info?.actionCount ?? "") : ""}:${(typeof history === "object" && Array.isArray(history)) ? history.length : ""}`;
-    if (turnId !== ":" && typeof state === "object") {
-        if (inHook === "context") {
-            if (state._aid_ac_context_turn === turnId) {
-                return [inText, inStop];
-            }
-            state._aid_ac_context_turn = turnId;
-        } else if (inHook === "output") {
-            if (state._aid_ac_output_turn === turnId) {
-                return inText;
-            }
-            state._aid_ac_output_turn = turnId;
-        }
-    }
     const EC_BUILD_VERSION = "2.8.0";
     const EC_BUILD_TIMESTAMP = "2026-11-06 05:45 UTC";
     const EC_BUILD_GIT_HASH = "f4cfb67";
