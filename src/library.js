@@ -44,6 +44,21 @@ function AutoCards(inHook, inText, inStop) {
         }
         return inText;
     }
+    // Guard against duplicate execution within the same turn (e.g. Slot 1 + InnerEntity caller)
+    const currentAction = (typeof info === "object" && typeof info?.actionCount === "number") ? info.actionCount : null;
+    if (currentAction !== null && typeof state === "object") {
+        if (inHook === "context") {
+            if (state._aid_ac_context_action === currentAction) {
+                return [inText, inStop];
+            }
+            state._aid_ac_context_action = currentAction;
+        } else if (inHook === "output") {
+            if (state._aid_ac_output_action === currentAction) {
+                return inText;
+            }
+            state._aid_ac_output_action = currentAction;
+        }
+    }
     const EC_BUILD_VERSION = "2.8.0";
     const EC_BUILD_TIMESTAMP = "2026-11-06 05:45 UTC";
     const EC_BUILD_GIT_HASH = "f4cfb67";
@@ -8031,13 +8046,15 @@ const isBundledWithIE = (typeof globalThis.InnerSelf === "function" || typeof gl
 
 if (!isBundledWithIE) {
     // This is a standalone Entity-Cards script slot
-    if (globalThis._AID_BUNDLED_EC === true) {
-        // Upstream Inner-Entity All-in-One already loaded a card engine!
+    if (globalThis._AID_BUNDLED_EC === true || globalThis._AID_STANDALONE_EC === true || (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function")) {
+        // Another card engine already loaded in an upstream slot!
         globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
         if (typeof state !== "undefined") state._aid_double_engine_detected = true;
         AutoCards._isBypassed = true;
-        AutoCards._bypassReason = "Standalone Entity-Cards bypassed: Upstream Inner-Entity All-in-One card engine is already active.";
-        try { (typeof log === "function" ? log : console.log)("   [AID WARNING]: Double Engine Detected! Inner-Entity All-in-One is active in an upstream slot. Standalone Entity-Cards in this slot has been automatically bypassed to prevent duplicate cards."); } catch (_) {}
+        AutoCards._bypassReason = globalThis._AID_BUNDLED_EC
+            ? "Standalone Entity-Cards bypassed: Upstream Inner-Entity All-in-One card engine is already active."
+            : "Standalone Entity-Cards bypassed: Another card engine instance is already active in an upstream slot.";
+        try { (typeof log === "function" ? log : console.log)(`   [AID WARNING]: Double Engine Detected! ${AutoCards._bypassReason}`); } catch (_) {}
     } else {
         // Primary standalone engine
         globalThis._AID_STANDALONE_EC = true;
@@ -8046,13 +8063,15 @@ if (!isBundledWithIE) {
     }
 } else {
     // This is bundled inside Inner-Entity All-in-One
-    if (globalThis._AID_STANDALONE_EC === true || (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function")) {
-        // Upstream Standalone Entity-Cards already loaded a card engine!
+    if (globalThis._AID_STANDALONE_EC === true || globalThis._AID_BUNDLED_EC === true || (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function")) {
+        // Another card engine already loaded in an upstream slot!
         globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
         if (typeof state !== "undefined") state._aid_double_engine_detected = true;
         AutoCards._isBypassed = true;
-        AutoCards._bypassReason = "Bundled Entity-Cards bypassed: Upstream standalone Entity-Cards engine is already active.";
-        try { (typeof log === "function" ? log : console.log)("   [AID WARNING]: Double Engine Detected! Standalone Entity-Cards is active in an upstream slot. Bundled card engine has been automatically bypassed to prevent duplicate cards."); } catch (_) {}
+        AutoCards._bypassReason = globalThis._AID_STANDALONE_EC
+            ? "Bundled Entity-Cards bypassed: Upstream standalone Entity-Cards engine is already active."
+            : "Bundled Entity-Cards bypassed: Another card engine instance is already active in an upstream slot.";
+        try { (typeof log === "function" ? log : console.log)(`   [AID WARNING]: Double Engine Detected! ${AutoCards._bypassReason}`); } catch (_) {}
     } else {
         // Primary bundled engine
         globalThis._AID_BUNDLED_EC = true;
