@@ -45,18 +45,18 @@ function AutoCards(inHook, inText, inStop) {
         return inText;
     }
     // Guard against duplicate execution within the same turn (e.g. Slot 1 + InnerEntity caller)
-    const currentAction = (typeof info === "object" && typeof info?.actionCount === "number") ? info.actionCount : null;
-    if (currentAction !== null && typeof state === "object") {
+    const turnId = `${typeof info === "object" ? (info?.actionCount ?? "") : ""}:${(typeof history === "object" && Array.isArray(history)) ? history.length : ""}`;
+    if (turnId !== ":" && typeof state === "object") {
         if (inHook === "context") {
-            if (state._aid_ac_context_action === currentAction) {
+            if (state._aid_ac_context_turn === turnId) {
                 return [inText, inStop];
             }
-            state._aid_ac_context_action = currentAction;
+            state._aid_ac_context_turn = turnId;
         } else if (inHook === "output") {
-            if (state._aid_ac_output_action === currentAction) {
+            if (state._aid_ac_output_turn === turnId) {
                 return inText;
             }
-            state._aid_ac_output_action = currentAction;
+            state._aid_ac_output_turn = turnId;
         }
     }
     const EC_BUILD_VERSION = "2.8.0";
