@@ -8027,66 +8027,73 @@ description: {1 concise sentence narrative summary}
         return codomain;
     }
 }
-const isBundledWithIE = (typeof globalThis.InnerSelf === "function" || typeof globalThis.InnerEntity === "function" || typeof globalThis.INNER_ENTITY_BUILD === "string");
+{
+    const isBundledWithIE = (typeof globalThis.InnerSelf === "function" || typeof globalThis.InnerEntity === "function" || typeof globalThis.INNER_ENTITY_BUILD === "string");
 
-if (!isBundledWithIE) {
-    // This is a standalone Entity-Cards script slot
-    if (globalThis._AID_BUNDLED_EC === true || globalThis._AID_STANDALONE_EC === true || (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function")) {
-        // Another card engine already loaded in an upstream slot!
-        globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
-        if (typeof state !== "undefined") state._aid_double_engine_detected = true;
-        AutoCards._isBypassed = true;
-        AutoCards._bypassReason = globalThis._AID_BUNDLED_EC
-            ? "Standalone Entity-Cards bypassed: Upstream Inner-Entity All-in-One card engine is already active."
-            : "Standalone Entity-Cards bypassed: Another card engine instance is already active in an upstream slot.";
-        try { (typeof log === "function" ? log : console.log)(`   [AID WARNING]: Double Engine Detected! ${AutoCards._bypassReason}`); } catch (_) {}
+    if (!isBundledWithIE) {
+        // This is a standalone Entity-Cards script slot
+        if (globalThis._AID_BUNDLED_EC === true || globalThis._AID_STANDALONE_EC === true || (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function")) {
+            // Another card engine already loaded in an upstream slot!
+            globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
+            if (typeof state !== "undefined") state._aid_double_engine_detected = true;
+            AutoCards._isBypassed = true;
+            AutoCards._bypassReason = globalThis._AID_BUNDLED_EC
+                ? "Standalone Entity-Cards bypassed: Upstream Inner-Entity All-in-One card engine is already active."
+                : "Standalone Entity-Cards bypassed: Another card engine instance is already active in an upstream slot.";
+            try { (typeof log === "function" ? log : console.log)(`   [AID WARNING]: Double Engine Detected! ${AutoCards._bypassReason}`); } catch (_) {}
+        } else {
+            // Primary standalone engine
+            globalThis._AID_STANDALONE_EC = true;
+            globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
+            AutoCards(null);
+        }
     } else {
-        // Primary standalone engine
-        globalThis._AID_STANDALONE_EC = true;
-        globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
-        AutoCards(null);
+        // This is bundled inside Inner-Entity All-in-One
+        if (globalThis._AID_STANDALONE_EC === true || globalThis._AID_BUNDLED_EC === true || (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function")) {
+            // Another card engine already loaded in an upstream slot!
+            globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
+            if (typeof state !== "undefined") state._aid_double_engine_detected = true;
+            AutoCards._isBypassed = true;
+            AutoCards._bypassReason = globalThis._AID_STANDALONE_EC
+                ? "Bundled Entity-Cards bypassed: Upstream standalone Entity-Cards engine is already active."
+                : "Bundled Entity-Cards bypassed: Another card engine instance is already active in an upstream slot.";
+            try { (typeof log === "function" ? log : console.log)(`   [AID WARNING]: Double Engine Detected! ${AutoCards._bypassReason}`); } catch (_) {}
+        } else {
+            // Primary bundled engine
+            globalThis._AID_BUNDLED_EC = true;
+            globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
+        }
     }
-} else {
-    // This is bundled inside Inner-Entity All-in-One
-    if (globalThis._AID_STANDALONE_EC === true || globalThis._AID_BUNDLED_EC === true || (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function")) {
-        // Another card engine already loaded in an upstream slot!
-        globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
-        if (typeof state !== "undefined") state._aid_double_engine_detected = true;
-        AutoCards._isBypassed = true;
-        AutoCards._bypassReason = globalThis._AID_STANDALONE_EC
-            ? "Bundled Entity-Cards bypassed: Upstream standalone Entity-Cards engine is already active."
-            : "Bundled Entity-Cards bypassed: Another card engine instance is already active in an upstream slot.";
-        try { (typeof log === "function" ? log : console.log)(`   [AID WARNING]: Double Engine Detected! ${AutoCards._bypassReason}`); } catch (_) {}
-    } else {
-        // Primary bundled engine
-        globalThis._AID_BUNDLED_EC = true;
-        globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
-    }
-}
 
-const EntityCards = AutoCards;
-if (!AutoCards._isBypassed) {
-    try { globalThis.AutoCards = AutoCards; } catch (_) {}
-    try { globalThis.EntityCards = AutoCards; } catch (_) {}
+    if (AutoCards._isBypassed) {
+        // Ensure globalThis.AutoCards continues pointing to the upstream active engine
+        if (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function") {
+            try { globalThis.AutoCards = globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE; } catch (_) {}
+            try { globalThis.EntityCards = globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE; } catch (_) {}
+        }
+    } else {
+        try { globalThis.AutoCards = AutoCards; } catch (_) {}
+        try { globalThis.EntityCards = AutoCards; } catch (_) {}
+    }
+    try {
+        const _ecm = {
+            name: "EntityCards",
+            version: typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0",
+            gitHash: typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f4cfb67",
+            buildTime: typeof EC_BUILD_TIMESTAMP === "string" ? EC_BUILD_TIMESTAMP : "2026-11-06 05:05 UTC",
+            author: "Randy Viosca (@Random_Variable) & LewdLeah",
+            prefix: "/ec",
+            aliases: ["/ac"],
+            description: "Autonomous story cards and named entity recognition for characters & lore",
+            helpSummary: "Autonomous story cards and lore generation (/ec <title>, /ec redo, /ec info)",
+            help: () => "Entity Cards Commands:\n  /ec <Title> [-<type>]       Generate card with optional entity type\n  /ec <Title> / {Details}     Generate card with custom guidance\n  /ec -r, --redo <Title>      Regenerate an existing card\n  /ec -R, --redo-all          Regenerate all automatic story cards\n  /ec -m, --mode <mode>       Switch mode: entity | classic\n  /ec -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n  /ec -i, --info              Display system, script & memory diagnostics\n  /ec -v, --version           Show script build version & git hash\n  /ec -h, --help              Show command help",
+            diag: () => `EntityCards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC (${typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f293890"})`
+        };
+        (globalThis.AID_MODULES ??= {})["entity-cards"] = _ecm;
+        if (typeof state !== "undefined") (state._aid_modules ??= {})["entity-cards"] = _ecm;
+        if (typeof globalThis.AID?.register === "function") globalThis.AID.register(_ecm);
+    } catch (_) {}
 }
-try {
-    const _ecm = {
-        name: "EntityCards",
-        version: typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0",
-        gitHash: typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f4cfb67",
-        buildTime: typeof EC_BUILD_TIMESTAMP === "string" ? EC_BUILD_TIMESTAMP : "2026-11-06 05:05 UTC",
-        author: "Randy Viosca (@Random_Variable) & LewdLeah",
-        prefix: "/ec",
-        aliases: ["/ac"],
-        description: "Autonomous story cards and named entity recognition for characters & lore",
-        helpSummary: "Autonomous story cards and lore generation (/ec <title>, /ec redo, /ec info)",
-        help: () => "Entity Cards Commands:\n  /ec <Title> [-<type>]       Generate card with optional entity type\n  /ec <Title> / {Details}     Generate card with custom guidance\n  /ec -r, --redo <Title>      Regenerate an existing card\n  /ec -R, --redo-all          Regenerate all automatic story cards\n  /ec -m, --mode <mode>       Switch mode: entity | classic\n  /ec -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n  /ec -i, --info              Display system, script & memory diagnostics\n  /ec -v, --version           Show script build version & git hash\n  /ec -h, --help              Show command help",
-        diag: () => `EntityCards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC (${typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f293890"})`
-    };
-    (globalThis.AID_MODULES ??= {})["entity-cards"] = _ecm;
-    if (typeof state !== "undefined") (state._aid_modules ??= {})["entity-cards"] = _ecm;
-    if (typeof globalThis.AID?.register === "function") globalThis.AID.register(_ecm);
-} catch (_) {}
 function isolateLSIv2(code, log, text, stop) { const console = Object.freeze({log}); try { eval(code); return [null, text, stop]; } catch (error) { return [error, text, stop]; } }
 
 // Your other library scripts go here
