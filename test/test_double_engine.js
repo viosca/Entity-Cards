@@ -165,6 +165,73 @@ const ecCode = fs.readFileSync(LIB_PATH, "utf8");
     console.log("   ✔ Test 4 passed: Dynamic reconfiguration clears warning when duplicate is removed mid-adventure");
 }
 
+// ----------------------------------------------------------------------------
+// Test 5: True Multi-VM Adventure Mode (Two Separate QuickJS Sandboxes & States)
+// ----------------------------------------------------------------------------
+{
+    const sharedCards = [];
+    const sharedHistory = [
+        { text: "Karane said, \"Hakari's probably in the classroom.\"", type: "say" },
+        { text: "Hakari stepped into the room and greeted Karane.", type: "story" }
+    ];
+    const sharedInfo = {
+        maxChars: 64000,
+        actionCount: 5,
+        useCacheEfficient: false,
+        storyModel: { name: "DeepSeek", version: "v3" }
+    };
+    const slot1State = {};
+    const slot2State = {};
+
+    function runECInIsolatedVM(slotState, hook, textVal, stopVal = false) {
+        const sb = {
+            log: () => {},
+            console: { log: () => {}, error: console.error },
+            Math, String, Array, Object, Number, RegExp, Set, Map, JSON,
+            parseInt, parseFloat, isNaN, isFinite, Date,
+            text: textVal,
+            stop: stopVal,
+            history: sharedHistory,
+            storyCards: sharedCards,
+            info: sharedInfo,
+            state: slotState,
+            addStoryCard(...args) {
+                let card = (args.length === 1)
+                    ? { title: args[0], entry: "", keys: "", type: "class", description: "" }
+                    : { keys: args[0], entry: args[1], type: args[2], title: args[3], description: args[4] };
+                sharedCards.push(card);
+                return card;
+            },
+            removeStoryCard(index) {
+                sharedCards.splice(index, 1);
+            }
+        };
+        sb.globalThis = sb;
+        vm.runInContext(ecCode, vm.createContext(sb));
+        if (hook === "context") {
+            const [t, s] = sb.AutoCards("context", sb.text, sb.stop);
+            return { text: t, stop: s };
+        }
+        return { text: sb.AutoCards(hook, sb.text), stop: sb.stop };
+    }
+
+    // 1. /ec -i piped through Slot 1 VM -> Slot 2 VM
+    let step1 = runECInIsolatedVM(slot1State, "input", "/ec -i");
+    let step2 = runECInIsolatedVM(slot2State, "input", step1.text);
+    assert(step2.text.includes("⚠️ [DOUBLE ENGINE DETECTED]"), "Multi-VM: Downstream slot must detect upstream /ec -i and inject warning");
+
+    // 2. Context hook piped through Slot 1 VM -> Slot 2 VM
+    sharedInfo.actionCount = 6;
+    delete slot2State.AutoCards;
+    let ctx1 = runECInIsolatedVM(slot1State, "context", "Recent Story:\nHakari greeted Karane.", false);
+    let ctx2 = runECInIsolatedVM(slot2State, "context", ctx1.text, ctx1.stop);
+    assert(slot1State.AutoCards, "Multi-VM: Primary Slot 1 must execute context");
+    assert.strictEqual(slot2State.AutoCards, undefined, "Multi-VM: Secondary Slot 2 must bypass context via storyCards stamp");
+    assert.strictEqual(sharedCards.filter(c => c.title && c.title.includes("Auto-Cards")).length, 1, "Multi-VM: Exactly 1 control card");
+
+    console.log("   ✔ Test 5 passed: Multi-VM isolated sandboxes coordinate via storyCards and input waterfall");
+}
+
 console.log("==================================================================");
 console.log("  🎉 ALL Entity-Cards DOUBLE ENGINE TESTS PASSED (100%)");
 console.log("==================================================================");
