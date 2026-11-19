@@ -38,6 +38,12 @@ Forked and expanded as "Entity Cards" by Randy Viosca (@Random_Variable on AI Du
 
 function AutoCards(inHook, inText, inStop) {
     "use strict";
+    if (AutoCards._isBypassed) {
+        if (inHook === "context") {
+            return [inText, inStop];
+        }
+        return inText;
+    }
     const EC_BUILD_VERSION = "2.8.0";
     const EC_BUILD_TIMESTAMP = "2026-11-06 05:45 UTC";
     const EC_BUILD_GIT_HASH = "f4cfb67";
@@ -6759,8 +6765,16 @@ description: {1 concise sentence narrative summary}
                     const bypassVal = AC.config.manualBypassTitleFilters !== false;
                     const filterVal = AC.config.filterCommonEntities !== false;
 
+                    const doubleEngineDetected = (typeof globalThis._AID_DOUBLE_ENGINE_DETECTED !== "undefined" && globalThis._AID_DOUBLE_ENGINE_DETECTED) || (typeof state === "object" && state?._aid_double_engine_detected);
+                    const doubleEngineWarning = doubleEngineDetected
+                        ? `  ⚠️ [DOUBLE ENGINE DETECTED]: Both standalone Entity-Cards and All-in-One Inner-Entity are loaded!\n`
+                        + `     -> Only ONE card engine is active (duplicate was automatically bypassed to protect story cards).\n`
+                        + `     -> Fix: In Script Manager, use 'inner-self-minds-only.js' for the minds slot to optimize memory.\n`
+                        : "";
+
                     result += `/${cmdPrefix} info ->\n`
                         + `=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n`
+                        + doubleEngineWarning
                         + `• Environment:\n`
                         + `  - Story Model:      ${modelStr}\n`
                         + `  - Optimize Context: ${cacheStr}\n`
@@ -8013,12 +8027,44 @@ description: {1 concise sentence narrative summary}
         return codomain;
     }
 }
-if (typeof globalThis.InnerSelf !== "function" && typeof globalThis.InnerEntity !== "function") {
-    AutoCards(null);
+const isBundledWithIE = (typeof globalThis.InnerSelf === "function" || typeof globalThis.InnerEntity === "function" || typeof globalThis.INNER_ENTITY_BUILD === "string");
+
+if (!isBundledWithIE) {
+    // This is a standalone Entity-Cards script slot
+    if (globalThis._AID_BUNDLED_EC === true) {
+        // Upstream Inner-Entity All-in-One already loaded a card engine!
+        globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
+        if (typeof state !== "undefined") state._aid_double_engine_detected = true;
+        AutoCards._isBypassed = true;
+        AutoCards._bypassReason = "Standalone Entity-Cards bypassed: Upstream Inner-Entity All-in-One card engine is already active.";
+        try { (typeof log === "function" ? log : console.log)("   [AID WARNING]: Double Engine Detected! Inner-Entity All-in-One is active in an upstream slot. Standalone Entity-Cards in this slot has been automatically bypassed to prevent duplicate cards."); } catch (_) {}
+    } else {
+        // Primary standalone engine
+        globalThis._AID_STANDALONE_EC = true;
+        globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
+        AutoCards(null);
+    }
+} else {
+    // This is bundled inside Inner-Entity All-in-One
+    if (globalThis._AID_STANDALONE_EC === true || (typeof globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE === "function")) {
+        // Upstream Standalone Entity-Cards already loaded a card engine!
+        globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
+        if (typeof state !== "undefined") state._aid_double_engine_detected = true;
+        AutoCards._isBypassed = true;
+        AutoCards._bypassReason = "Bundled Entity-Cards bypassed: Upstream standalone Entity-Cards engine is already active.";
+        try { (typeof log === "function" ? log : console.log)("   [AID WARNING]: Double Engine Detected! Standalone Entity-Cards is active in an upstream slot. Bundled card engine has been automatically bypassed to prevent duplicate cards."); } catch (_) {}
+    } else {
+        // Primary bundled engine
+        globalThis._AID_BUNDLED_EC = true;
+        globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
+    }
 }
+
 const EntityCards = AutoCards;
-try { globalThis.AutoCards = AutoCards; } catch (_) {}
-try { globalThis.EntityCards = AutoCards; } catch (_) {}
+if (!AutoCards._isBypassed) {
+    try { globalThis.AutoCards = AutoCards; } catch (_) {}
+    try { globalThis.EntityCards = AutoCards; } catch (_) {}
+}
 try {
     const _ecm = {
         name: "EntityCards",
