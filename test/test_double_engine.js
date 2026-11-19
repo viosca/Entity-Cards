@@ -1,0 +1,149 @@
+#!/usr/bin/env node
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+const assert = require("assert");
+
+const ROOT_DIR = path.resolve(__dirname, "..");
+const LIB_PATH = path.join(ROOT_DIR, "src", "library.js");
+
+console.log("==================================================================");
+console.log("  TEST SUITE: Entity-Cards Double Engine & Collision Guard");
+console.log("  Target: " + LIB_PATH);
+console.log("==================================================================");
+
+function createMockAIDContext(initialCards = []) {
+    const cards = [...initialCards];
+    const logged = [];
+    const sandbox = {
+        log: (...args) => {
+            logged.push(args.join(" "));
+            console.log("   [AID LOG]:", ...args);
+        },
+        console: { log: (...args) => console.log("   [CONSOLE]:", ...args), error: console.error },
+        Math, String, Array, Object, Number, RegExp, Set, Map, JSON,
+        parseInt, parseFloat, isNaN, isFinite, Date,
+        text: "",
+        stop: false,
+        history: [
+            { text: "Karane said, \"Hakari's probably in the classroom.\"", type: "say" },
+            { text: "Hakari stepped into the room and greeted Karane.", type: "story" }
+        ],
+        storyCards: cards,
+        info: {
+            maxChars: 64000,
+            actionCount: 2,
+            useCacheEfficient: false,
+            storyModel: { name: "DeepSeek", version: "v3" }
+        },
+        state: {},
+        addStoryCard(...args) {
+            let card = (args.length === 1)
+                ? { title: args[0], entry: "", keys: "", type: "class", description: "" }
+                : { keys: args[0], entry: args[1], type: args[2], title: args[3], description: args[4] };
+            cards.push(card);
+            return card;
+        },
+        removeStoryCard(index) {
+            cards.splice(index, 1);
+        }
+    };
+    sandbox.globalThis = sandbox;
+    return { sandbox, ctx: vm.createContext(sandbox), logged, cards };
+}
+
+const ecCode = fs.readFileSync(LIB_PATH, "utf8");
+
+// ----------------------------------------------------------------------------
+// Test 1: Duplicate Standalone Entity-Cards in Slot 1 and Slot 2
+// ----------------------------------------------------------------------------
+{
+    const { sandbox, ctx, cards } = createMockAIDContext();
+
+    // Slot 1: Primary Standalone Entity-Cards
+    vm.runInContext(ecCode, ctx);
+    const slot1Instance = sandbox.AutoCards;
+    assert.strictEqual(typeof slot1Instance, "function");
+    assert.strictEqual(sandbox._AID_STANDALONE_EC, true);
+    assert.strictEqual(Boolean(sandbox._AID_DOUBLE_ENGINE_DETECTED), false);
+    assert.strictEqual(Boolean(slot1Instance._isBypassed), false);
+
+    // Run first context hook to trigger initialization and config card creation
+    sandbox.AutoCards("context", "A sunny day in the city.", false);
+
+    // Initial Configure card created
+    const configCardsSlot1 = cards.filter(c => c.title && c.title.includes("Auto-Cards"));
+    assert.strictEqual(configCardsSlot1.length, 1, "Slot 1 should create exactly 1 Configure card");
+
+    // Slot 2: Duplicate Standalone Entity-Cards loaded in same session
+    vm.runInContext(ecCode, ctx);
+
+    // Assert collision detected
+    assert.strictEqual(sandbox._AID_DOUBLE_ENGINE_DETECTED, true, "Double engine flag must be set in globalThis");
+    assert.strictEqual(sandbox.state._aid_double_engine_detected, true, "Double engine flag must be set in state");
+    assert.strictEqual(sandbox.AutoCards, slot1Instance, "globalThis.AutoCards must remain Slot 1's instance");
+
+    // Configure cards must not be duplicated
+    const configCardsSlot2 = cards.filter(c => c.title && c.title.includes("Auto-Cards"));
+    assert.strictEqual(configCardsSlot2.length, 1, "Duplicate instance must NOT generate a second Configure card");
+
+    // Diagnostic info contains warning
+    const infoOut = sandbox.AutoCards("input", "/ec -i");
+    assert(infoOut.includes("⚠️ [DOUBLE ENGINE DETECTED]"), "Diagnostic info must display warning banner");
+    assert(infoOut.includes("Only ONE card engine is active"), "Diagnostic info must explain duplicate bypassed");
+
+    console.log("   ✔ Test 1 passed: Duplicate standalone instances safely detected & bypassed");
+}
+
+// ----------------------------------------------------------------------------
+// Test 2: Upstream Bundled Engine detected by Standalone Entity-Cards
+// ----------------------------------------------------------------------------
+{
+    const { sandbox, ctx, cards } = createMockAIDContext();
+
+    // Simulate upstream All-in-One having loaded first in Slot 1
+    sandbox._AID_BUNDLED_EC = true;
+    const mockBundledEngine = function(hook, text, stop) {
+        if (hook === "context") return [text, stop];
+        return text;
+    };
+    sandbox._AID_ACTIVE_CARD_ENGINE_INSTANCE = mockBundledEngine;
+    sandbox.AutoCards = mockBundledEngine;
+
+    // Slot 2: Standalone Entity-Cards loads
+    vm.runInContext(ecCode, ctx);
+
+    // Assert standalone yielded to bundled engine
+    assert.strictEqual(sandbox._AID_DOUBLE_ENGINE_DETECTED, true, "Double engine must be flagged");
+    assert.strictEqual(sandbox.state._aid_double_engine_detected, true, "Double engine must be flagged in state");
+    assert.strictEqual(sandbox.AutoCards, mockBundledEngine, "Bundled engine must NOT be overwritten by downstream standalone");
+
+    // The downstream standalone instance must be bypassed
+    const standaloneInstance = sandbox._AID_ACTIVE_CARD_ENGINE_INSTANCE; // still mockBundled
+    assert.strictEqual(standaloneInstance, mockBundledEngine);
+
+    console.log("   ✔ Test 2 passed: Standalone yields cleanly to upstream bundled engine");
+}
+
+// ----------------------------------------------------------------------------
+// Test 3: Standalone Normal Single-Slot Lifecycle (No False Positives)
+// ----------------------------------------------------------------------------
+{
+    const { sandbox, ctx } = createMockAIDContext();
+    vm.runInContext(ecCode, ctx);
+
+    assert.strictEqual(sandbox._AID_STANDALONE_EC, true);
+    assert.strictEqual(sandbox._AID_DOUBLE_ENGINE_DETECTED, undefined);
+    assert.strictEqual(sandbox.state._aid_double_engine_detected, undefined);
+    assert.strictEqual(Boolean(sandbox.AutoCards._isBypassed), false);
+
+    const infoOut = sandbox.AutoCards("input", "/ec -i");
+    assert(!infoOut.includes("DOUBLE ENGINE"), "Normal standalone must not trigger false positive warning");
+    console.log("   ✔ Test 3 passed: Standalone normal operation shows zero collision warnings");
+}
+
+console.log("==================================================================");
+console.log("  🎉 ALL Entity-Cards DOUBLE ENGINE TESTS PASSED (100%)");
+console.log("==================================================================");
