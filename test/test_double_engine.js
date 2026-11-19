@@ -135,13 +135,34 @@ const ecCode = fs.readFileSync(LIB_PATH, "utf8");
     vm.runInContext(ecCode, ctx);
 
     assert.strictEqual(sandbox._AID_STANDALONE_EC, true);
-    assert.strictEqual(sandbox._AID_DOUBLE_ENGINE_DETECTED, undefined);
+    assert.strictEqual(sandbox._AID_DOUBLE_ENGINE_DETECTED, false);
     assert.strictEqual(sandbox.state._aid_double_engine_detected, undefined);
     assert.strictEqual(Boolean(sandbox.AutoCards._isBypassed), false);
 
     const infoOut = sandbox.AutoCards("input", "/ec -i");
     assert(!infoOut.includes("DOUBLE ENGINE"), "Normal standalone must not trigger false positive warning");
     console.log("   ✔ Test 3 passed: Standalone normal operation shows zero collision warnings");
+}
+
+// ----------------------------------------------------------------------------
+// Test 4: Dynamic Reconfiguration: Removing duplicate clears state flag on next turn
+// ----------------------------------------------------------------------------
+{
+    const { sandbox, ctx } = createMockAIDContext();
+    // Simulate persistent state retaining collision flag from previous turn
+    sandbox.state._aid_double_engine_detected = true;
+
+    // Next turn: Player has removed the duplicate script, only standalone runs
+    vm.runInContext(ecCode, ctx);
+
+    // Assert primary engine automatically cleaned up the stale flag
+    assert.strictEqual(sandbox._AID_DOUBLE_ENGINE_DETECTED, false, "Double engine flag must be reset to false");
+    assert.strictEqual(sandbox.state._aid_double_engine_detected, undefined, "state flag must be deleted");
+    assert.strictEqual(Boolean(sandbox.AutoCards._isBypassed), false, "Engine must be active");
+
+    const infoOut = sandbox.AutoCards("input", "/ec -i");
+    assert(!infoOut.includes("DOUBLE ENGINE"), "Warning banner must be removed once duplicate script is removed");
+    console.log("   ✔ Test 4 passed: Dynamic reconfiguration clears warning when duplicate is removed mid-adventure");
 }
 
 console.log("==================================================================");
