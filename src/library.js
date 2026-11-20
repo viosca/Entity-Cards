@@ -36,6 +36,44 @@ Forked and expanded as "Entity Cards" by Randy Viosca (@Random_Variable on AI Du
 - Selectable operating mode: "entity" (Entity Cards) or "classic" (Classic Auto-Cards)
 */
 
+var EC_BUILD_VERSION = "2.8.0";
+var EC_BUILD_TIMESTAMP = "2026-11-20 05:15 UTC";
+var EC_BUILD_GIT_HASH = "feat/cscp";
+
+/**
+ * Dynamic StoryCard DLL Bootstrapper for AI Dungeon.
+ * Decodes the 16-Variation-Selector (\uFE00..\uFE0F) CSCP client DLL exported
+ * by AID-Modules into storyCards[i].keys and hydrates globalThis.AID_CSCP.
+ */
+function loadCSCP() {
+    const root = typeof globalThis !== "undefined" ? globalThis : this;
+    if (root.AID_CSCP) return root.AID_CSCP;
+    const sc = (typeof storyCards !== "undefined" && Array.isArray(storyCards))
+        ? storyCards
+        : (Array.isArray(root.storyCards) ? root.storyCards : null);
+    if (sc) {
+        for (const c of sc) {
+            const k = c && c.keys;
+            const s = typeof k === "string" ? k.indexOf("\u200D\uFE00\u200D") : -1;
+            if (s !== -1) {
+                const e = k.indexOf("\u200D\uFE0F\u200D", s + 3);
+                if (e !== -1 && ((e - (s + 3)) % 2 === 0)) {
+                    let js = "";
+                    for (let i = s + 3; i < e; i += 2) {
+                        js += String.fromCharCode(((k.charCodeAt(i) & 15) << 4) | (k.charCodeAt(i + 1) & 15));
+                    }
+                    return (0, eval)(js + ";globalThis.AID_CSCP;");
+                }
+            }
+        }
+    }
+    return null;
+}
+
+if (typeof globalThis !== "undefined") {
+    globalThis.loadCSCP = loadCSCP;
+}
+
 function AutoCards(inHook, inText, inStop) {
     "use strict";
     if (AutoCards._isBypassed) {
@@ -129,6 +167,50 @@ function AutoCards(inHook, inText, inStop) {
         : AutoCards._instanceUid;
     const turnKey = `${typeof info === "object" ? (info?.actionCount ?? 0) : 0}:${(typeof history !== "undefined" && Array.isArray(history)) ? history.length : 0}`;
 
+    // Cross-Slot Coordination Protocol (CSCP) Announce & Capability Check
+    let cscpYielded = false;
+    let cscpActive = false;
+    try {
+        const cscp = typeof loadCSCP === "function" ? loadCSCP() : null;
+        if (cscp && typeof cscp.announce === "function") {
+            const hookPhase = (inHook === "input" || inHook === "context" || inHook === "output") ? inHook : "init";
+            const cscpRes = cscp.announce({
+                name: "entity-cards",
+                displayName: "EntityCards",
+                version: typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0",
+                provides: ["entity-cards"],
+                prefix: "/ec",
+                aliases: ["/ac"],
+                commands: ["/ec", "/ac"],
+                description: "Autonomous story cards and named entity recognition for characters & lore",
+                helpSummary: "Autonomous story cards and lore generation (/ec <title>, /ec redo, /ec info)"
+            }, { phase: hookPhase, slotUid });
+
+            if (cscpRes) {
+                cscpActive = true;
+                if (Array.isArray(cscpRes.yielded) && cscpRes.yielded.includes("entity-cards")) {
+                    cscpYielded = true;
+                    globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
+                    if (typeof state === "object" && state) state._aid_double_engine_detected = true;
+                    AutoCards._isBypassed = true;
+                    AutoCards._bypassReason = "Standalone Entity-Cards bypassed: Upstream slot claimed 'entity-cards' capability.";
+                }
+            }
+        }
+    } catch (_) {}
+
+    if (cscpYielded) {
+        if (inHook === "context") return [inText, inStop];
+        if (inHook === "input" && typeof inText === "string" && /^\s*\/(?:EC|AC)\b[^\n]*->/i.test(inText)) {
+            if (!inText.includes("DOUBLE ENGINE")) {
+                const warnBanner = `\n  ⚠️ [DOUBLE ENGINE DETECTED]: Both standalone Entity-Cards and an upstream card engine are loaded!\n`
+                    + `     -> Only ONE card engine is active (downstream duplicate bypassed via CSCP).\n`;
+                return inText + warnBanner;
+            }
+        }
+        return inText;
+    }
+
     if (inHook === "input") {
         const rawCheck = typeof inText === "string" ? inText : (typeof text === "string" ? text : "");
         // 1. Did an upstream card engine slot already process an /ec or /ac command?
@@ -172,7 +254,9 @@ function AutoCards(inHook, inText, inStop) {
             writeCrossSlotStamp({ ...prevInStamp, c: 1 });
             return inText;
         }
-        writeCrossSlotStamp({ t: turnKey, p: "input", u: slotUid, e: isBundledInstance ? "ie" : "ec", c: 0 });
+        if (!cscpActive) {
+            writeCrossSlotStamp({ t: turnKey, p: "input", u: slotUid, e: isBundledInstance ? "ie" : "ec", c: 0 });
+        }
     } else if (inHook === "context" || inHook === "output") {
         const prevStamp = readCrossSlotStamp();
         if (prevStamp && prevStamp.t === turnKey && prevStamp.p === inHook && prevStamp.u && prevStamp.u !== slotUid) {
@@ -187,13 +271,15 @@ function AutoCards(inHook, inText, inStop) {
                 delete state._aid_double_engine_detected;
             }
         }
-        writeCrossSlotStamp({
-            t: turnKey,
-            p: inHook,
-            u: slotUid,
-            e: isBundledInstance ? "ie" : "ec",
-            c: (prevStamp && prevStamp.t === turnKey && prevStamp.c === 1) ? 1 : 0
-        });
+        if (!cscpActive) {
+            writeCrossSlotStamp({
+                t: turnKey,
+                p: inHook,
+                u: slotUid,
+                e: isBundledInstance ? "ie" : "ec",
+                c: (prevStamp && prevStamp.t === turnKey && prevStamp.c === 1) ? 1 : 0
+            });
+        }
     } else if (inHook === null && typeof text === "string" && /Recent\s*Story\s*:/i.test(text)) {
         const prevStamp = readCrossSlotStamp();
         if (prevStamp && prevStamp.t === turnKey && prevStamp.p === "context" && prevStamp.u && prevStamp.u !== slotUid) {
@@ -8189,7 +8275,7 @@ description: {1 concise sentence narrative summary}
         }
     }
     // This is the only return point within the parent scope of AutoCards
-    if (inHook === "context" || inHook === "output" || inHook === "input") {
+    if (!cscpActive && (inHook === "context" || inHook === "output" || inHook === "input")) {
         const latestStamp = readCrossSlotStamp();
         writeCrossSlotStamp({
             t: turnKey,
@@ -8223,12 +8309,38 @@ description: {1 concise sentence narrative summary}
                 : "Standalone Entity-Cards bypassed: Another card engine instance is already active in an upstream slot.";
             try { (typeof log === "function" ? log : console.log)(`   [AID WARNING]: Double Engine Detected! ${AutoCards._bypassReason}`); } catch (_) {}
         } else {
-            // Primary standalone engine
-            globalThis._AID_STANDALONE_EC = true;
-            globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
-            globalThis._AID_DOUBLE_ENGINE_DETECTED = false;
-            if (typeof state !== "undefined") delete state._aid_double_engine_detected;
-            AutoCards(null);
+            // Check CSCP at startup if available
+            try {
+                const cscp = typeof loadCSCP === "function" ? loadCSCP() : null;
+                if (cscp && typeof cscp.announce === "function") {
+                    const res = cscp.announce({
+                        name: "entity-cards",
+                        displayName: "EntityCards",
+                        version: typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0",
+                        provides: ["entity-cards"],
+                        prefix: "/ec",
+                        aliases: ["/ac"],
+                        commands: ["/ec", "/ac"],
+                        description: "Autonomous story cards and named entity recognition for characters & lore",
+                        helpSummary: "Autonomous story cards and lore generation (/ec <title>, /ec redo, /ec info)"
+                    }, { phase: "init" });
+                    if (res && res.yielded && res.yielded.includes("entity-cards")) {
+                        globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
+                        if (typeof state !== "undefined") state._aid_double_engine_detected = true;
+                        AutoCards._isBypassed = true;
+                        AutoCards._bypassReason = "Standalone Entity-Cards bypassed: Upstream slot claimed 'entity-cards' capability.";
+                    }
+                }
+            } catch (_) {}
+
+            if (!AutoCards._isBypassed) {
+                // Primary standalone engine
+                globalThis._AID_STANDALONE_EC = true;
+                globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
+                globalThis._AID_DOUBLE_ENGINE_DETECTED = false;
+                if (typeof state !== "undefined") delete state._aid_double_engine_detected;
+                AutoCards(null);
+            }
         }
     } else {
         // This is bundled inside Inner-Entity All-in-One
