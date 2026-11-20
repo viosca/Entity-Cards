@@ -8387,7 +8387,21 @@ description: {1 concise sentence narrative summary}
             diag: () => `EntityCards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC (${typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f293890"})`
         };
         (globalThis.AID_MODULES ??= {})["entity-cards"] = _ecm;
-        if (typeof state !== "undefined") (state._aid_modules ??= {})["entity-cards"] = _ecm;
+        if (typeof state !== "undefined") {
+            (state._aid_modules ??= {})["entity-cards"] = {
+                name: _ecm.name,
+                version: _ecm.version,
+                gitHash: _ecm.gitHash,
+                buildTime: _ecm.buildTime,
+                author: _ecm.author,
+                prefix: _ecm.prefix,
+                aliases: _ecm.aliases,
+                description: _ecm.description,
+                helpSummary: _ecm.helpSummary,
+                help: "Entity Cards Commands:\n  /ec <Title> [-<type>]       Generate card with optional entity type\n  /ec <Title> / {Details}     Generate card with custom guidance\n  /ec -r, --redo <Title>      Regenerate an existing card\n  /ec -R, --redo-all          Regenerate all automatic story cards\n  /ec -m, --mode <mode>       Switch mode: entity | classic\n  /ec -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n  /ec -i, --info              Display system, script & memory diagnostics\n  /ec -v, --version           Show script build version & git hash\n  /ec -h, --help              Show command help",
+                diag: `EntityCards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC (${typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f293890"})`
+            };
+        }
         if (typeof globalThis.AID?.register === "function") globalThis.AID.register(_ecm);
     } catch (_) {}
 }
