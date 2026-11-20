@@ -76,6 +76,9 @@ if (typeof globalThis !== "undefined") {
 
 function AutoCards(inHook, inText, inStop) {
     "use strict";
+    const EC_BUILD_VERSION = "2.8.0";
+    const EC_BUILD_TIMESTAMP = "2026-11-06 05:45 UTC";
+    const EC_BUILD_GIT_HASH = "f4cfb67";
     if (AutoCards._isBypassed) {
         if (inHook === "context") {
             return [inText, inStop];
@@ -288,9 +291,6 @@ function AutoCards(inHook, inText, inStop) {
             return null;
         }
     }
-    const EC_BUILD_VERSION = "2.8.0";
-    const EC_BUILD_TIMESTAMP = "2026-11-06 05:45 UTC";
-    const EC_BUILD_GIT_HASH = "f4cfb67";
     /*
     Default Auto-Cards settings
     Feel free to change these settings to customize your scenario's default gameplay experience
