@@ -175,7 +175,7 @@ function AutoCards(inHook, inText, inStop) {
     let cscpActive = false;
     try {
         const cscp = typeof loadCSCP === "function" ? loadCSCP() : null;
-        if (cscp && typeof cscp.announce === "function") {
+        if (!isBundledInstance && cscp && typeof cscp.announce === "function") {
             const hookPhase = (inHook === "input" || inHook === "context" || inHook === "output") ? inHook : "init";
             const cscpRes = cscp.announce({
                 name: "entity-cards",
