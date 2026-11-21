@@ -5676,7 +5676,8 @@ description: {1 concise sentence narrative summary}
                     ("title" in pendingWorkpiece) && (title === pendingWorkpiece.title)
                 ))))
             ) {
-                logEvent("The title '" + request.title + "' is invalid or unavailable for card generation", true);
+                const reason = getCardRejectionReason(request.title, isManual);
+                logEvent("The title '" + request.title + "' cannot be generated: " + reason, true);
                 return false;
             }
 
@@ -6296,6 +6297,9 @@ description: {1 concise sentence narrative summary}
                 }
             }
             return null;
+        }
+        static getCardRejectionReason(rawTitle, isManual) {
+            return getCardRejectionReason(rawTitle, isManual);
         }
     }); }
     function validateCooldown(cooldown) {
@@ -7274,12 +7278,18 @@ description: {1 concise sentence narrative summary}
                         function submitRequest(extra) {
                             request.isManual = true;
                             O.f(request);
-                            const [type, success] = (function() {
+                            const [type, success, failReason] = (function() {
                                 if (isRedo) {
-                                    return [" redo", Internal.redoCard(request, true, "")];
+                                    const matchingCard = getIntendedCard(request.title)[0];
+                                    if (!matchingCard) {
+                                        return [" redo", false, "No matching Story Card found for \"" + request.title + "\""];
+                                    }
+                                    const ok = Internal.redoCard(request, true, "");
+                                    return [" redo", ok, ok ? "" : getCardRejectionReason(request.title, true)];
                                 } else {
                                     Internal.getUsedTitles(true);
-                                    return ["", Internal.generateCard(request, ["", ""], true)];
+                                    const ok = Internal.generateCard(request, ["", ""], true);
+                                    return ["", ok, ok ? "" : getCardRejectionReason(request.title, true)];
                                 }
                             })();
                             const typeTag = cli.flags.entityType ? " [-" + cli.flags.entityType.toLowerCase() + "]" : "";
@@ -7291,8 +7301,9 @@ description: {1 concise sentence narrative summary}
                                 logEvent(parsed);
                             } else {
                                 const parsed = left + request.title + right + typeTag;
-                                result += parsed + " -> \"" + request.title + "\" is invalid or unavailable" + typeTag;
-                                logEvent(parsed);
+                                const reason = failReason || getCardRejectionReason(request.title, true);
+                                result += parsed + " -> " + reason + typeTag;
+                                logEvent(parsed + " -> " + reason);
                             }
                         }
                     }
@@ -8140,6 +8151,113 @@ description: {1 concise sentence narrative summary}
             }
         }
         return bans.has(lowerTitle);
+    }
+    function getCardRejectionReason(rawTitle, isManual = true) {
+        const titleStr = (rawTitle ?? "").toString().trim();
+        if (titleStr.length === 0) {
+            return "Title is empty";
+        }
+        if (titleStr.length < (isManual ? 2 : 3)) {
+            return `"${titleStr}" is too short (minimum ${isManual ? 2 : 3} characters)`;
+        }
+
+        const lowerCandidate = titleStr.toLowerCase();
+        const cleanCandidate = lowerCandidate.replace(/["\.\?!;\(\):\[\]—{}]/g, " ").trim().replace(/\s+/g, " ");
+
+        // 1. Actively generating workpiece
+        const wp = AC?.generation?.workpiece;
+        if (wp && typeof wp === "object" && wp.title) {
+            const wpTitle = String(wp.title).trim();
+            if (wpTitle.toLowerCase() === lowerCandidate || formatTitle(wpTitle, true).newTitle.toLowerCase() === lowerCandidate) {
+                return `Card generation for "${wpTitle}" is already in progress`;
+            }
+        }
+
+        // 2. Queued in pending generations
+        const pending = AC?.generation?.pending;
+        if (Array.isArray(pending)) {
+            const foundPending = pending.find(p => p && p.title && (
+                String(p.title).trim().toLowerCase() === lowerCandidate ||
+                formatTitle(String(p.title).trim(), true).newTitle.toLowerCase() === lowerCandidate
+            ));
+            if (foundPending) {
+                return `"${foundPending.title}" is already queued in pending generation`;
+            }
+        }
+
+        // 3. Existing Story Cards check
+        const cards = (typeof storyCards !== "undefined" && Array.isArray(storyCards))
+            ? storyCards
+            : (typeof root !== "undefined" && Array.isArray(root.storyCards) ? root.storyCards : []);
+
+        // 3a. Direct Story Card title match
+        for (const c of cards) {
+            if (!c || typeof c.title !== "string" || !c.title.trim()) continue;
+            const cTitle = c.title.trim();
+            const lowerCTitle = cTitle.toLowerCase();
+            if (lowerCTitle === lowerCandidate || lowerCTitle === cleanCandidate) {
+                return `Story Card "${cTitle}" already exists`;
+            }
+            if (checkPlurals(lowerCandidate, t => t === lowerCTitle, isManual)) {
+                return `Matches existing Story Card "${cTitle}"`;
+            }
+        }
+
+        // 3b. Embedded Auto-Card title {title: ...} in entry or description
+        for (const c of cards) {
+            if (!c) continue;
+            const entryText = typeof c.entry === "string" ? c.entry : "";
+            const descText = typeof c.description === "string" ? c.description : "";
+            const match = entryText.match(/{\s*title:\s*([^}]+)}/i) || descText.match(/{\s*title:\s*([^}]+)}/i);
+            if (match && match[1]) {
+                const embeddedTitle = match[1].trim();
+                const lowerEmbedded = embeddedTitle.toLowerCase();
+                if (lowerEmbedded === lowerCandidate || checkPlurals(lowerCandidate, t => t === lowerEmbedded, isManual)) {
+                    return `Already exists in Story Card "${c.title || embeddedTitle}"`;
+                }
+            }
+        }
+
+        // 3c. Story Card trigger keys match
+        for (const c of cards) {
+            if (!c || typeof c.keys !== "string" || !c.keys.trim()) continue;
+            const keysList = c.keys.split(",").map(k => k.trim()).filter(Boolean);
+            for (const key of keysList) {
+                const cleanKey = key.replace(/["\.\?!;\(\):\[\]—{}]/g, " ").trim().replace(/\s+/g, " ").toLowerCase();
+                if (cleanKey === lowerCandidate || cleanKey === cleanCandidate) {
+                    return `"${titleStr}" is already used as a trigger key in Story Card "${c.title || "Untitled"}"`;
+                }
+                if (checkPlurals(lowerCandidate, t => t === cleanKey, isManual)) {
+                    return `"${titleStr}" matches trigger key "${key}" in Story Card "${c.title || "Untitled"}"`;
+                }
+            }
+        }
+
+        // 3d. Fallback for used set
+        if (used && used.size > 0) {
+            if (used.has(lowerCandidate) || checkPlurals(lowerCandidate, t => used.has(t), isManual)) {
+                return `"${titleStr}" is already claimed by an existing Story Card`;
+            }
+        }
+
+        // 4. System reserved keywords
+        if (isSystemBanned(lowerCandidate)) {
+            return `"${titleStr}" is a reserved system keyword`;
+        }
+
+        // 5. Banned titles list
+        if (isBanned(lowerCandidate)) {
+            return `"${titleStr}" is in the banned titles list`;
+        }
+
+        // 6. Formatting / word boundary check
+        const formatted = formatTitle(titleStr, isManual);
+        if (!formatted || !formatted.newTitle) {
+            return `"${titleStr}" contains no valid entity characters or words`;
+        }
+
+        // Fallback
+        return `"${titleStr}" is invalid or unavailable`;
     }
     function isNamed(title, returnSurname) {
         const peerage = new Set(Words.peerage);

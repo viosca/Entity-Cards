@@ -311,6 +311,57 @@ const clean = (s) => (typeof s === "string" ? s.replace(/\u200D\u200B\u200C\u200
     console.log("   ✔ Output hook executed cleanly: AutoCards('output', text)");
 }
 
+// 11. Specific Card Generation Rejection Diagnostics
+{
+    // Clean state
+    sandbox.state.AutoCards.generation.workpiece = {};
+    sandbox.state.AutoCards.generation.pending = [];
+
+    // 11a. Rejection when title is too short
+    const shortOut = sandbox.AutoCards("input", "/ec a -p");
+    assert(shortOut.includes('"a" is too short (minimum 2 characters)'), "Expected 'too short' diagnostic message");
+    console.log("   ✔ Specific diagnostic: Title too short accurately identified");
+
+    // 11b. Rejection when actively generating in workpiece
+    sandbox.state.AutoCards.generation.workpiece = { title: "Elrond", steps: [] };
+    const activeOut = sandbox.AutoCards("input", "/ec Elrond -p");
+    assert(activeOut.includes('Card generation for "Elrond" is already in progress'), "Expected 'already in progress' diagnostic message");
+    console.log("   ✔ Specific diagnostic: Workpiece in progress accurately identified");
+    sandbox.state.AutoCards.generation.workpiece = {};
+
+    // 11c. Rejection when queued in pending list
+    sandbox.state.AutoCards.generation.pending = [{ title: "Galadriel" }];
+    const pendingOut = sandbox.AutoCards("input", "/ec Galadriel -p");
+    assert(pendingOut.includes('"Galadriel" is already queued in pending generation'), "Expected 'already queued' diagnostic message");
+    console.log("   ✔ Specific diagnostic: Queued card in pending list accurately identified");
+    sandbox.state.AutoCards.generation.pending = [];
+
+    // 11d. Rejection when trigger key is claimed by an existing card (the "brenner" scenario)
+    sandbox.storyCards = [
+        {
+            title: "Dr. Martin Brenner",
+            keys: "brenner, dr brenner, papa",
+            entry: "Director of Hawkins National Laboratory.",
+            type: "character"
+        }
+    ];
+    // Force refresh used titles
+    sandbox.AutoCards().API.getUsedTitles();
+    const brennerOut = sandbox.AutoCards("input", "/ec -p brenner");
+    assert(brennerOut.includes('"brenner" is already used as a trigger key in Story Card "Dr. Martin Brenner"'), "Expected specific trigger key collision diagnostic for brenner");
+    console.log("   ✔ Specific diagnostic: Trigger key collision on existing card accurately identified");
+
+    // 11e. Rejection when exact Story Card title already exists
+    const existingOut = sandbox.AutoCards("input", '/ec -p "Dr. Martin Brenner"');
+    assert(existingOut.includes('Story Card "Dr. Martin Brenner" already exists'), "Expected specific existing card diagnostic");
+    console.log("   ✔ Specific diagnostic: Existing Story Card title accurately identified");
+
+    // 11f. Rejection when title is a reserved system keyword
+    const reservedOut = sandbox.AutoCards("input", "/ec -p entity");
+    assert(reservedOut.includes('"entity" is a reserved system keyword'), "Expected specific reserved system keyword diagnostic");
+    console.log("   ✔ Specific diagnostic: Reserved system keyword accurately identified");
+}
+
 console.log("==================================================================");
-console.log("  🎉 ALL 10 Auto-Cards STANDALONE LIFECYCLE TESTS PASSED (100%)");
+console.log("  🎉 ALL 11 Auto-Cards STANDALONE LIFECYCLE TESTS PASSED (100%)");
 console.log("==================================================================");
