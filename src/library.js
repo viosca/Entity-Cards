@@ -214,15 +214,15 @@ function AutoCards(inHook, inText, inStop) {
         return inText;
     }
 
-    if (inHook === "input") {
+    if (inHook === "input" || inHook === "output") {
         const rawCheck = typeof inText === "string" ? inText : (typeof text === "string" ? text : "");
         // 1. Did an upstream card engine slot already process an /ec or /ac command?
         if (/^\s*\/(?:EC|AC)\b[^\n]*->/i.test(rawCheck) || (rawCheck.includes(EC_INPUT_HANDSHAKE) && /\/\s*(?:A|E)\s*C\b/i.test(rawCheck))) {
             globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
             if (typeof state === "object" && state) state._aid_double_engine_detected = true;
             AutoCards._isBypassed = true;
-            writeCrossSlotStamp({ t: turnKey, p: "input", u: "upstream", c: 1 });
-            if (!rawCheck.includes("DOUBLE ENGINE DETECTED")) {
+            writeCrossSlotStamp({ t: turnKey, p: inHook, u: "upstream", c: 1 });
+            if (!rawCheck.includes("DOUBLE ENGINE DETECTED") && inHook === "output") {
                 const warnBanner = `  ⚠️ [DOUBLE ENGINE DETECTED]: Both standalone Entity-Cards and an upstream card engine are loaded!\n`
                     + `     -> Only ONE card engine is active (downstream duplicate was automatically bypassed).\n`;
                 if (rawCheck.includes("=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===")) {
@@ -230,17 +230,22 @@ function AutoCards(inHook, inText, inStop) {
                         "=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n",
                         "=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n" + warnBanner
                     );
+                } else if (rawCheck.includes("=== ENTITY CARDS DIAGNOSTICS ===")) {
+                    return rawCheck.replace(
+                        "=== ENTITY CARDS DIAGNOSTICS ===\n",
+                        "=== ENTITY CARDS DIAGNOSTICS ===\n" + warnBanner
+                    );
                 }
                 return rawCheck + "\n" + warnBanner;
             }
-            return rawCheck;
+            return inHook === "context" ? [inText, inStop] : inText;
         }
         // 2. Did an upstream Inner-Entity slot already process /ie -i (while we are a downstream Standalone EC slot)?
         if (!isBundledInstance && /^\s*\/(?:IE|IS)\s+info\s*->/i.test(rawCheck)) {
             if (/\[(all-in-one|classic)\]/i.test(rawCheck)) {
                 globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
                 if (typeof state === "object" && state) state._aid_double_engine_detected = true;
-                writeCrossSlotStamp({ t: turnKey, p: "input", u: "upstream-ie", c: 1 });
+                writeCrossSlotStamp({ t: turnKey, p: inHook, u: "upstream-ie", c: 1 });
                 if (!rawCheck.includes("DOUBLE ENGINE WARNING")) {
                     const ieWarn = `\n  ⚠️ [DOUBLE ENGINE WARNING]: Both standalone Entity-Cards and All-in-One Inner-Entity are loaded!\n`
                         + `     -> Duplicate card engine automatically bypassed to protect story cards.\n`
@@ -253,15 +258,17 @@ function AutoCards(inHook, inText, inStop) {
             }
         }
         // 3. Check shared storyCards stamp for same-turn input collision across VMs
-        const prevInStamp = readCrossSlotStamp();
-        if (prevInStamp && prevInStamp.t === turnKey && prevInStamp.p === "input" && prevInStamp.u && prevInStamp.u !== slotUid) {
-            globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
-            if (typeof state === "object" && state) state._aid_double_engine_detected = true;
-            writeCrossSlotStamp({ ...prevInStamp, c: 1 });
-            return inText;
-        }
-        if (!cscpActive) {
-            writeCrossSlotStamp({ t: turnKey, p: "input", u: slotUid, e: isBundledInstance ? "ie" : "ec", c: 0 });
+        if (inHook === "input") {
+            const prevInStamp = readCrossSlotStamp();
+            if (prevInStamp && prevInStamp.t === turnKey && prevInStamp.p === "input" && prevInStamp.u && prevInStamp.u !== slotUid) {
+                globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
+                if (typeof state === "object" && state) state._aid_double_engine_detected = true;
+                writeCrossSlotStamp({ ...prevInStamp, c: 1 });
+                return inText;
+            }
+            if (!cscpActive) {
+                writeCrossSlotStamp({ t: turnKey, p: "input", u: slotUid, e: isBundledInstance ? "ie" : "ec", c: 0 });
+            }
         }
     } else if (inHook === "context" || inHook === "output") {
         const prevStamp = readCrossSlotStamp();
@@ -286,7 +293,7 @@ function AutoCards(inHook, inText, inStop) {
                 c: (prevStamp && prevStamp.t === turnKey && prevStamp.c === 1) ? 1 : 0
             });
         }
-    } else if (inHook === null && typeof text === "string" && /Recent\s*Story\s*:/i.test(text)) {
+    } else if (inHook === null) {
         const prevStamp = readCrossSlotStamp();
         if (prevStamp && prevStamp.t === turnKey && prevStamp.p === "context" && prevStamp.u && prevStamp.u !== slotUid) {
             globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
@@ -7600,6 +7607,7 @@ description: {1 concise sentence narrative summary}
     // Used to parse the "Configure Auto-Cards" and "Edit to enable Auto-Cards" control card entries
     function extractSettings(settingsText) {
         const settings = {};
+        if (typeof settingsText !== "string") return settings;
         const rawLines = settingsText.replace(/>/g, "\n").split("\n");
         for (const rawLine of rawLines) {
             const trimmed = rawLine.trim();
