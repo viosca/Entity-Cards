@@ -148,6 +148,92 @@ const clean = (s) => (typeof s === "string" ? s.replace(/\u200D\u200B\u200C\u200
     console.log("   ✔ cleanPromptOnCardGen config option cleanly preserves prompt during manual card generation");
 }
 
+// 6b. Abort / Cancel commands (/ec -a, /ec --abort, /ec cancel)
+{
+    // Clean state to ensure idle
+    sandbox.state.AutoCards.generation.pending = [];
+    sandbox.state.AutoCards.generation.workpiece = {};
+    sandbox.state.AutoCards.generation.completed = 0;
+    sandbox.state.AutoCards.generation.lastConstructed = null;
+
+    // Idle state abort
+    const abortIn = "/ec -a";
+    const abortOut = sandbox.AutoCards("input", abortIn);
+    assert.strictEqual(clean(abortOut), abortIn, "/ec -a must preserve user prompt on input");
+    const storyAbortIdle = sandbox.AutoCards("output", "");
+    assert(storyAbortIdle.includes("/EC abort -> No card generation or compression is currently in progress."), "Expected idle abort message");
+    console.log("   ✔ /ec -a in idle state cleanly reports no generation in progress");
+
+    // In-progress card generation abort
+    sandbox.state.AutoCards.generation.workpiece = {
+        title: "Thorin",
+        explicitType: "Person",
+        entry: "ENTITY_BEGIN\nentity: Thorin\ntype: Person\nrole: Blacksmith\n",
+        limit: 1200
+    };
+    sandbox.state.AutoCards.generation.completed = 2;
+    const cancelIn = "/ec cancel";
+    const cancelOut = sandbox.AutoCards("input", cancelIn);
+    assert.strictEqual(clean(cancelOut), cancelIn, "/ec cancel must preserve user prompt on input");
+    const storyCancelActive = sandbox.AutoCards("output", "");
+    assert(storyCancelActive.includes('/EC abort -> Card generation for "Thorin" was aborted.'), "Expected active abort message for Thorin");
+    assert.strictEqual(Object.keys(sandbox.state.AutoCards.generation.workpiece).length, 0, "Workpiece must be cleared after abort");
+    assert.strictEqual(sandbox.state.AutoCards.generation.completed, 0, "Completed counter must reset to 0");
+    console.log("   ✔ /ec cancel cleanly aborts active card workpiece and resets counters");
+
+    // Option B: Notice after 100% completion
+    sandbox.state.AutoCards.generation.lastConstructed = { title: "Thorin", turn: 5 };
+    const cancelDoneIn = "/ec --abort";
+    const cancelDoneOut = sandbox.AutoCards("input", cancelDoneIn);
+    assert.strictEqual(clean(cancelDoneOut), cancelDoneIn, "/ec --abort must preserve prompt on input");
+    const storyCancelDone = sandbox.AutoCards("output", "");
+    assert(storyCancelDone.includes('already completed (100%) and was added to your Story Cards'), "Expected 100% completion notice");
+    sandbox.state.AutoCards.generation.lastConstructed = null;
+    console.log("   ✔ /ec --abort provides informative notice if card already completed (Option B)");
+}
+
+// 6c. Progress display: Card Title, Entity Type & Toast mode
+{
+    sandbox.state.AutoCards.config.doAC = true;
+    // Active workpiece for progress formatting
+    sandbox.state.AutoCards.generation.workpiece = {
+        title: "Thorin",
+        explicitType: "Person",
+        entry: "ENTITY_BEGIN\nentity: Thorin\n",
+        limit: 1200
+    };
+    sandbox.state.AutoCards.generation.completed = 1;
+    sandbox.state.AutoCards.generation.permitted = 4;
+    sandbox.state.AutoCards.config.progressDisplay = "story";
+
+    // Default 'story' mode: includes title and entity type
+    sandbox.text = "role: Blacksmith\n";
+    const progStory = sandbox.AutoCards("output", "role: Blacksmith\n");
+    assert(progStory.includes('Generating "Thorin" [Person]: please select "continue"'), "Progress message must include card title and type");
+    console.log("   ✔ postOutputMessage displays active card title and entity type in progress prompt");
+
+    // Configurable 'toast' mode: updates state.message overlay
+    sandbox.state.AutoCards.config.progressDisplay = "toast";
+    sandbox.state.AutoCards.generation.workpiece = {
+        title: "Thorin",
+        explicitType: "Person",
+        entry: "ENTITY_BEGIN\nentity: Thorin\n",
+        limit: 1200
+    };
+    sandbox.state.AutoCards.generation.completed = 1;
+    sandbox.state.AutoCards.generation.permitted = 4;
+
+    sandbox.text = "appearance: Muscular\n";
+    const progToast = sandbox.AutoCards("output", "appearance: Muscular\n");
+    assert.strictEqual(progToast.trim(), "", "Toast mode must suppress story line output");
+    assert(sandbox.state.message.includes('[Entity-Cards] Generating "Thorin" [Person]: Progress:'), "Toast mode must update state.message in place");
+    sandbox.state.AutoCards.config.progressDisplay = "story"; // restore default
+    sandbox.state.AutoCards.config.doAC = false; // restore default
+    sandbox.state.AutoCards.generation.workpiece = {}; // clean up
+    sandbox.state.AutoCards.generation.completed = 0;
+    console.log("   ✔ progressDisplay: toast cleanly updates state.message without consuming story display lines");
+}
+
 // 7. Protected bareword titles: /ec "Info" -org
 {
     const out = sandbox.AutoCards("input", '/ec "Info" -org');

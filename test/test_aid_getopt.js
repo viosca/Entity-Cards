@@ -16,6 +16,7 @@ const TEST_SPEC = {
     version:   { short: "v", type: "boolean" },
     help:      { short: "h", aliases: ["?"], type: "boolean" },
     info:      { short: "i", aliases: ["diag", "debug", "sysinfo"], type: "boolean" },
+    abort:     { short: "a", aliases: ["cancel", "stop"], type: "boolean" },
     mode:      { short: "m", type: "string", enum: ["entity", "classic"] },
     preset:    { short: "P", type: "string", enum: ["standard", "lite", "authoring"] },
     header:    { type: "string" },
@@ -166,6 +167,29 @@ const TEST_SPEC = {
     console.log("   ✔ POSIX '--' delimiter stops option parsing");
 }
 
+// 11. Abort / Cancel command parsing & title protection
+{
+    const r1 = GetoptAID.parse("-a", TEST_SPEC);
+    assert.strictEqual(r1.flags.abort, true);
+    assert.strictEqual(r1.target, "");
+
+    const r2 = GetoptAID.parse("--abort", TEST_SPEC);
+    assert.strictEqual(r2.flags.abort, true);
+
+    const r3 = GetoptAID.parse("--cancel", TEST_SPEC);
+    assert.strictEqual(r3.flags.abort, true);
+
+    const r4 = GetoptAID.parse("--stop", TEST_SPEC);
+    assert.strictEqual(r4.flags.abort, true);
+
+    // Protected title matching abort
+    const r5 = GetoptAID.parse('"Abort" -p', TEST_SPEC);
+    assert.strictEqual(r5.flags.abort, undefined);
+    assert.strictEqual(r5.flags.entityType, "Person");
+    assert.strictEqual(r5.target, "Abort");
+    console.log("   ✔ -a, --abort, --cancel, and --stop parsed; quoted 'Abort' protected");
+}
+
 console.log("\n==================================================================");
-console.log("  🎉 ALL 10 AID-Getopt UNIT TESTS PASSED (100% SUCCESS)");
+console.log("  🎉 ALL 11 AID-Getopt UNIT TESTS PASSED (100% SUCCESS)");
 console.log("==================================================================");

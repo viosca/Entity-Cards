@@ -384,6 +384,9 @@ function AutoCards(inHook, inText, inStop) {
     // [*EC] Preserve player input prompt on manual card generation (/ec <Title>) instead of rewriting prompt?
     let DEFAULT_EC_CLEAN_PROMPT_ON_CARD_GEN = false
 
+    // [*EC] Progress display mode during card generation: "story" (default, in adventure stream) or "toast" (state.message overlay banner)
+    let DEFAULT_EC_PROGRESS_DISPLAY = "story"
+
     // [*EC] Preset dictionaries for Entity Cards prompts
     const EC_PRESETS = {
         standard: `-----
@@ -759,6 +762,12 @@ description: {1 concise sentence narrative summary}
                 }
             }
 
+            // Support unflagged "abort" / "cancel" / "stop"
+            if (i === 0 && /^(?:abort|cancel|stop)$/i.test(text)) {
+                flags.abort = true;
+                continue;
+            }
+
             // Normalize mobile smart dashes (en-dash, em-dash)
             if (/^[—–]/.test(text)) {
                 text = text.replace(/^[—–]{2}/, "--").replace(/^[—–]/, "-");
@@ -848,6 +857,7 @@ description: {1 concise sentence narrative summary}
         version: { short: "v", type: "boolean" },
         help:    { short: "h", aliases: ["?"], type: "boolean" },
         info:    { short: "i", aliases: ["diag", "diagnostics", "debug", "sysinfo"], type: "boolean" },
+        abort:   { short: "a", aliases: ["cancel", "stop"], type: "boolean" },
         mode:    { short: "m", type: "string", enum: ["entity", "classic"] },
         preset:  { short: "P", type: "string", enum: ["standard", "lite", "authoring", "custom"] },
         header:  { type: "string" },
@@ -1458,6 +1468,10 @@ description: {1 concise sentence narrative summary}
         })();
         if (ac?.config) {
             ac.config.cleanPromptOnCardGen ??= false;
+            ac.config.progressDisplay ??= "story";
+        }
+        if (ac?.generation) {
+            ac.generation.lastConstructed ??= null;
         }
         // If the deserialized state fails to match the following structure, fallback to defaults
         if (validate(ac, O.f({
@@ -1469,13 +1483,13 @@ description: {1 concise sentence narrative summary}
                 "operatingMode", "ECContextHeader", "autoTypeCards", "trimPhraseFragStory", "trimDelimiterFragStory", "stripAsterisksStory", "prettifyEmDashesStory", "normalizeWhitespaceStory",
                 "SCContainerize", "SCContainerOpen", "SCContainerClose", "SCContainerAIBeginSentinel", "SCContainerAIEndSentinel",
                 "showDebugData", "showDebugDataSCRawAIEntry", "showDebugDataSCRawAIMemory", "generationPrompt", "compressionPrompt", "defaultCardType",
-                "ECPreset", "ECAutoPreset", "manualBypassTitleFilters", "filterCommonEntities", "cleanPromptOnCardGen"
+                "ECPreset", "ECAutoPreset", "manualBypassTitleFilters", "filterCommonEntities", "cleanPromptOnCardGen", "progressDisplay"
             ],
             signal: [
                 "emergencyHalt", "forceToggle", "overrideBans", "swapControlCards", "recheckRetryOrErase", "maxChars", "outputReplacement", "upstreamError"
             ],
             generation: [
-                "cooldown", "completed", "permitted", "workpiece", "pending"
+                "cooldown", "completed", "permitted", "workpiece", "pending", "lastConstructed"
             ],
             compression: [
                 "completed", "titleKey", "vanityTitle", "responseEstimate", "lastConstructIndex", "oldMemoryBank", "newMemoryBank"
@@ -1550,6 +1564,8 @@ description: {1 concise sentence narrative summary}
                 workpiece: O.f({}),
                 // Pending card generations
                 pending: [],
+                // Last constructed card info for cancellation / notices
+                lastConstructed: null,
             },
             // Moderates the compression of story card memories
             compression: {
@@ -4250,7 +4266,8 @@ description: {1 concise sentence narrative summary}
                 if (AC.config.showDebugDataSCRawAIEntry) {
                     logEvent("Raw AI Output (isPendingGeneration): " + TEXT);
                 }
-                const textClone = Internal.prettifyEmDashes(text).replace(/\*/g,"");
+                const rawSourceText = (typeof text === "string" && text) ? text : TEXT;
+                const textClone = Internal.prettifyEmDashes(rawSourceText).replace(/\*/g,"");
 
                 AC.chronometer.amnesia = 0;
                 AC.generation.completed++;
@@ -4591,6 +4608,10 @@ description: {1 concise sentence narrative summary}
                             })()),
                             description: AC.generation.workpiece.description,
                         }), newCardIndex());
+                        AC.generation.lastConstructed = {
+                            title: AC.generation.workpiece.title,
+                            turn: getTurn()
+                        };
                     }
                     AC.generation.cooldown = AC.config.addCardCooldown;
                     AC.generation.completed = 0;
@@ -4673,9 +4694,23 @@ description: {1 concise sentence narrative summary}
                     // Do nothing
                 } else if (0.5 < similarityScore(textClone, output)) {
                     // To improve Auto-Cards' compatability with other scripts, I only bother to replace the output text when the original and new output texts have a similarity score above a particular threshold. Otherwise, I may safely assume the output text has already been replaced by another script and thus skip this step.
-                    CODOMAIN.initialize(
-                        getPrecedingNewlines() + ">>> please select \"continue\" (" + Math.round(ratio * 100) + "%) <<<\n\n"
-                    );
+                    const workpiece = AC.generation.workpiece;
+                    const cardTitle = (workpiece && workpiece.title) ? workpiece.title : (AC.compression.titleKey || "");
+                    const cardType = (workpiece && (workpiece.explicitType || workpiece.type)) ? (workpiece.explicitType || workpiece.type) : "";
+                    const typeLabel = cardType ? ` [${cardType}]` : "";
+                    const prefix = cardTitle ? `Generating "${cardTitle}"${typeLabel}: ` : "";
+                    const percent = Math.round(ratio * 100);
+
+                    if (AC.config.progressDisplay === "toast") {
+                        if (typeof state === "object" && state) {
+                            state.message = `[Entity-Cards] ${prefix}Progress: ${percent}% (Click Continue)`;
+                        }
+                        CODOMAIN.initialize("\n");
+                    } else {
+                        CODOMAIN.initialize(
+                            getPrecedingNewlines() + `>>> ${prefix}please select "continue" (${percent}%) <<<\n\n`
+                        );
+                    }
                 } else {
                     CODOMAIN.initialize(output);
                 }
@@ -6354,7 +6389,8 @@ description: {1 concise sentence narrative summary}
                 "string"
             ),
             defaultCardType: "auto-card",
-            cleanPromptOnCardGen: check(DEFAULT_EC_CLEAN_PROMPT_ON_CARD_GEN, false)
+            cleanPromptOnCardGen: check(DEFAULT_EC_CLEAN_PROMPT_ON_CARD_GEN, false),
+            progressDisplay: check(DEFAULT_EC_PROGRESS_DISPLAY, "story")
         });
     }
     function getDefaultConfigBans() {
@@ -6582,7 +6618,8 @@ description: {1 concise sentence narrative summary}
             "> Prettify card em dashes: " + AC.config.prettifyEmDashesCards,
             "> Log raw ai entry data: " + AC.config.showDebugDataSCRawAIEntry,
             "> Log raw ai memory data: " + AC.config.showDebugDataSCRawAIMemory,
-            "> Clean prompt on card generation: " + AC.config.cleanPromptOnCardGen
+            "> Clean prompt on card generation: " + AC.config.cleanPromptOnCardGen,
+            "> Progress display: " + AC.config.progressDisplay
         );
     }
     function getECConfigureCardDescription() {
@@ -6782,6 +6819,12 @@ description: {1 concise sentence narrative summary}
             if (typeof settings.cleanpromptoncardgeneration === "boolean") {
                 AC.config.cleanPromptOnCardGen = settings.cleanpromptoncardgeneration;
             }
+            if (typeof settings.progressdisplay === "string") {
+                const pd = settings.progressdisplay.toLowerCase().trim();
+                if (pd === "toast" || pd === "story") {
+                    AC.config.progressDisplay = pd;
+                }
+            }
             ecCard.entry = getECConfigureCardEntry();
             ecCard.description = getECConfigureCardDescription();
         }
@@ -6956,7 +6999,7 @@ description: {1 concise sentence narrative summary}
                 logEvent(`/${cmdPrefix}`);
             } else {
                 const cli = parseCommandLine(requestTitle);
-                if (cli.flags.version || cli.flags.help || cli.flags.info || cli.flags.mode !== undefined || cli.flags.preset !== undefined || cli.flags.header !== undefined || cli.flags.redoAll || (!cli.title && (cli.flags.entityType || cli.flags.redo))) {
+                if (cli.flags.version || cli.flags.help || cli.flags.info || cli.flags.abort || cli.flags.mode !== undefined || cli.flags.preset !== undefined || cli.flags.header !== undefined || cli.flags.redoAll || (!cli.title && (cli.flags.entityType || cli.flags.redo))) {
                     isGetoptCommand = true;
                 } else {
                     isCardGenCommand = true;
@@ -6988,6 +7031,7 @@ description: {1 concise sentence narrative summary}
                         + `  /${cmdPrefix.toLowerCase()} <Title> / {Details}     Generate card with custom guidance\n`
                         + `  /${cmdPrefix.toLowerCase()} -r, --redo <Title>      Regenerate an existing card (or legacy "redo <Title>")\n`
                         + `  /${cmdPrefix.toLowerCase()} -R, --redo-all          Regenerate all automatic story cards (or legacy "redo all")\n`
+                        + `  /${cmdPrefix.toLowerCase()} -a, --abort, cancel     Terminate active card generation\n`
                         + `  /${cmdPrefix.toLowerCase()} -m, --mode <mode>       Switch mode: entity | classic\n`
                         + `  /${cmdPrefix.toLowerCase()} -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n`
                         + `  /${cmdPrefix.toLowerCase()} --header <text>         Set context header (e.g. --header "Codex Entities:")\n`
@@ -7150,6 +7194,36 @@ description: {1 concise sentence narrative summary}
                     }
                     result += "\n\n";
                     logEvent(parsed);
+                } else if (cli.flags.abort) {
+                    const isGen = isPendingGeneration();
+                    const isWait = isAwaitingGeneration();
+                    const isComp = isPendingCompression();
+                    if (isGen || isWait || isComp) {
+                        const targetTitle = (isGen && AC.generation.workpiece?.title)
+                            || (isWait && AC.generation.pending[0]?.title)
+                            || (isComp && AC.compression.titleKey)
+                            || "active card";
+                        AC.generation.workpiece = O.f({});
+                        AC.generation.pending = [];
+                        AC.generation.completed = 0;
+                        AC.generation.permitted = 34;
+                        AC.generation.cooldown = AC.config.addCardCooldown;
+                        if (isComp) {
+                            AC.compression.titleKey = "";
+                            AC.compression.completed = 0;
+                            AC.compression.lastConstructIndex = 0;
+                            AC.compression.oldMemoryBank = [];
+                        }
+                        deactivateOCTaskCard();
+                        result += `/${cmdPrefix} abort -> Card generation for "${targetTitle}" was aborted.\n\n`;
+                        logEvent(`/${cmdPrefix} abort: "${targetTitle}"`);
+                    } else if (AC.generation.lastConstructed?.title) {
+                        result += `/${cmdPrefix} abort -> Card generation for "${AC.generation.lastConstructed.title}" already completed (100%) and was added to your Story Cards. To remove it, delete it from your Story Cards list.\n\n`;
+                        logEvent(`/${cmdPrefix} abort: already completed "${AC.generation.lastConstructed.title}"`);
+                    } else {
+                        result += `/${cmdPrefix} abort -> No card generation or compression is currently in progress.\n\n`;
+                        logEvent(`/${cmdPrefix} abort: idle`);
+                    }
                 } else {
                     const rawTitle = cli.title;
                     if (!rawTitle) {
@@ -8434,7 +8508,7 @@ description: {1 concise sentence narrative summary}
             aliases: ["/ac"],
             description: "Autonomous story cards and named entity recognition for characters & lore",
             helpSummary: "Autonomous story cards and lore generation (/ec <title>, /ec redo, /ec info)",
-            help: () => "Entity Cards Commands:\n  /ec <Title> [-<type>]       Generate card with optional entity type\n  /ec <Title> / {Details}     Generate card with custom guidance\n  /ec -r, --redo <Title>      Regenerate an existing card\n  /ec -R, --redo-all          Regenerate all automatic story cards\n  /ec -m, --mode <mode>       Switch mode: entity | classic\n  /ec -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n  /ec -i, --info              Display system, script & memory diagnostics\n  /ec -v, --version           Show script build version & git hash\n  /ec -h, --help              Show command help",
+            help: () => "Entity Cards Commands:\n  /ec <Title> [-<type>]       Generate card with optional entity type\n  /ec <Title> / {Details}     Generate card with custom guidance\n  /ec -r, --redo <Title>      Regenerate an existing card\n  /ec -R, --redo-all          Regenerate all automatic story cards\n  /ec -a, --abort, cancel     Terminate active card generation\n  /ec -m, --mode <mode>       Switch mode: entity | classic\n  /ec -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n  /ec -i, --info              Display system, script & memory diagnostics\n  /ec -v, --version           Show script build version & git hash\n  /ec -h, --help              Show command help",
             diag: () => `EntityCards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC (${typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f293890"})`
         };
         (globalThis.AID_MODULES ??= {})["entity-cards"] = _ecm;
@@ -8449,7 +8523,7 @@ description: {1 concise sentence narrative summary}
                 aliases: _ecm.aliases,
                 description: _ecm.description,
                 helpSummary: _ecm.helpSummary,
-                help: "Entity Cards Commands:\n  /ec <Title> [-<type>]       Generate card with optional entity type\n  /ec <Title> / {Details}     Generate card with custom guidance\n  /ec -r, --redo <Title>      Regenerate an existing card\n  /ec -R, --redo-all          Regenerate all automatic story cards\n  /ec -m, --mode <mode>       Switch mode: entity | classic\n  /ec -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n  /ec -i, --info              Display system, script & memory diagnostics\n  /ec -v, --version           Show script build version & git hash\n  /ec -h, --help              Show command help",
+                help: "Entity Cards Commands:\n  /ec <Title> [-<type>]       Generate card with optional entity type\n  /ec <Title> / {Details}     Generate card with custom guidance\n  /ec -r, --redo <Title>      Regenerate an existing card\n  /ec -R, --redo-all          Regenerate all automatic story cards\n  /ec -a, --abort, cancel     Terminate active card generation\n  /ec -m, --mode <mode>       Switch mode: entity | classic\n  /ec -P, --preset <name>     Switch schema: standard | lite | authoring | custom\n  /ec -i, --info              Display system, script & memory diagnostics\n  /ec -v, --version           Show script build version & git hash\n  /ec -h, --help              Show command help",
                 diag: `EntityCards Ver.${typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0"}-EC (${typeof EC_BUILD_GIT_HASH === "string" ? EC_BUILD_GIT_HASH : "f293890"})`
             };
         }
