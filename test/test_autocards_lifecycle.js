@@ -227,11 +227,44 @@ const clean = (s) => (typeof s === "string" ? s.replace(/\u200D\u200B\u200C\u200
     const progToast = sandbox.AutoCards("output", "appearance: Muscular\n");
     assert.strictEqual(progToast.trim(), "", "Toast mode must suppress story line output");
     assert(sandbox.state.message.includes('[Entity-Cards] Generating "Thorin" [Person]: Progress:'), "Toast mode must update state.message in place");
+    console.log("   ✔ progressDisplay: toast cleanly updates state.message without consuming story display lines");
+
+    // 100% completion in story mode: announces card creation and allows player next action
+    sandbox.state.AutoCards.config.progressDisplay = "story";
+    sandbox.state.AutoCards.generation.workpiece = {
+        title: "Thorin",
+        type: "Person",
+        explicitType: "Person",
+        entry: "ENTITY_BEGIN\nentity: Thorin\nrole: Blacksmith\npersonality: Loyal\nDescription: A master blacksmith.\nENTITY_END\n",
+        limit: 1200
+    };
+    sandbox.state.AutoCards.generation.completed = 2;
+    sandbox.text = "Description: A master blacksmith.\nENTITY_END\n";
+    const progDoneStory = sandbox.AutoCards("output", sandbox.text);
+    assert(progDoneStory.includes('Generated "Thorin" [Person] (100%): Card added to Story Cards!'), "100% completion must announce card creation");
+    assert(progDoneStory.includes('You may now take your next action (Do, Say, Story)'), "100% completion must invite user to take next action instead of saying please select continue");
+    console.log("   ✔ 100% completion in story mode announces card added to Story Cards and prompts for next action");
+
+    // 100% completion in toast mode
+    sandbox.state.AutoCards.config.progressDisplay = "toast";
+    sandbox.state.AutoCards.generation.workpiece = {
+        title: "Thorin",
+        type: "Person",
+        explicitType: "Person",
+        entry: "ENTITY_BEGIN\nentity: Thorin\nrole: Blacksmith\npersonality: Loyal\nDescription: A master blacksmith.\nENTITY_END\n",
+        limit: 1200
+    };
+    sandbox.state.AutoCards.generation.completed = 2;
+    sandbox.text = "Description: A master blacksmith.\nENTITY_END\n";
+    const progDoneToast = sandbox.AutoCards("output", sandbox.text);
+    assert.strictEqual(progDoneToast.trim(), "", "Toast mode on 100% must suppress story line output");
+    assert(sandbox.state.message.includes('Generated "Thorin" [Person] (100%): Card added to Story Cards!'), "Toast mode on 100% must update state.message with completion notice");
+    console.log("   ✔ 100% completion in toast mode updates state.message with completion notice");
+
     sandbox.state.AutoCards.config.progressDisplay = "story"; // restore default
     sandbox.state.AutoCards.config.doAC = false; // restore default
     sandbox.state.AutoCards.generation.workpiece = {}; // clean up
     sandbox.state.AutoCards.generation.completed = 0;
-    console.log("   ✔ progressDisplay: toast cleanly updates state.message without consuming story display lines");
 }
 
 // 7. Protected bareword titles: /ec "Info" -org

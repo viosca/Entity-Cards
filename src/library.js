@@ -1452,9 +1452,7 @@ description: {1 concise sentence narrative summary}
             return state.LSIv2;
         } else if (state.AutoCards) {
             // state.AutoCards is prioritized for performance
-            const ac = state.AutoCards;
-            delete state.AutoCards;
-            return ac;
+            return state.AutoCards;
         }
         const dataVariants = getDataVariants();
         data = getSingletonCard(false, O.f({...dataVariants.critical}), O.f({...dataVariants.debug}));
@@ -4380,7 +4378,7 @@ description: {1 concise sentence narrative summary}
                             // The AI signaled the end of the entry.
                             //logEvent("outputModifier: Saw the end sentinel or completed description, skipping end.");
                             // The final cleanup happens in the card generation.
-                            AC.generation.workpiece.type = entityType;
+                            try { AC.generation.workpiece.type = entityType; } catch (_) {}
                             return 0; // Causes a skip to end.
                         }
 
@@ -4389,7 +4387,7 @@ description: {1 concise sentence narrative summary}
                         //logEvent("workpiece length: " + entrySize);
                         if (entrySize > AC.config.defaultEntryLimit ) {
                             //logEvent("outputModifier: Got max entry length, skipping end."); //
-                            AC.generation.workpiece.type = entityType;
+                            try { AC.generation.workpiece.type = entityType; } catch (_) {}
                             return 0;
                         }
                         return skip(estimateRemainingGens());
@@ -4695,21 +4693,39 @@ description: {1 concise sentence narrative summary}
                 } else if (0.5 < similarityScore(textClone, output)) {
                     // To improve Auto-Cards' compatability with other scripts, I only bother to replace the output text when the original and new output texts have a similarity score above a particular threshold. Otherwise, I may safely assume the output text has already been replaced by another script and thus skip this step.
                     const workpiece = AC.generation.workpiece;
-                    const cardTitle = (workpiece && workpiece.title) ? workpiece.title : (AC.compression.titleKey || "");
+                    const isComp = isPendingCompression();
+                    const cardTitle = (workpiece && workpiece.title) ? workpiece.title : (AC.compression.vanityTitle || AC.compression.titleKey || "");
                     const cardType = (workpiece && (workpiece.explicitType || workpiece.type)) ? (workpiece.explicitType || workpiece.type) : "";
                     const typeLabel = cardType ? ` [${cardType}]` : "";
-                    const prefix = cardTitle ? `Generating "${cardTitle}"${typeLabel}: ` : "";
                     const percent = Math.round(ratio * 100);
 
-                    if (AC.config.progressDisplay === "toast") {
-                        if (typeof state === "object" && state) {
-                            state.message = `[Entity-Cards] ${prefix}Progress: ${percent}% (Click Continue)`;
+                    if (percent >= 100) {
+                        const doneLabel = isComp
+                            ? (cardTitle ? `Compressed memories for "${cardTitle}" (100%)!` : `Compressed card memories (100%)!`)
+                            : (cardTitle ? `Generated "${cardTitle}"${typeLabel} (100%): Card added to Story Cards!` : `Generated Story Card (100%)!`);
+
+                        if (AC.config.progressDisplay === "toast") {
+                            if (typeof state === "object" && state) {
+                                state.message = `[Entity-Cards] ${doneLabel} Ready for your next action.`;
+                            }
+                            CODOMAIN.initialize("\n");
+                        } else {
+                            CODOMAIN.initialize(
+                                getPrecedingNewlines() + `>>> ${doneLabel} You may now take your next action (Do, Say, Story). <<<\n\n`
+                            );
                         }
-                        CODOMAIN.initialize("\n");
                     } else {
-                        CODOMAIN.initialize(
-                            getPrecedingNewlines() + `>>> ${prefix}please select "continue" (${percent}%) <<<\n\n`
-                        );
+                        const prefix = cardTitle ? `${isComp ? "Compressing" : "Generating"} "${cardTitle}"${typeLabel}: ` : "";
+                        if (AC.config.progressDisplay === "toast") {
+                            if (typeof state === "object" && state) {
+                                state.message = `[Entity-Cards] ${prefix}Progress: ${percent}% (Click Continue)`;
+                            }
+                            CODOMAIN.initialize("\n");
+                        } else {
+                            CODOMAIN.initialize(
+                                getPrecedingNewlines() + `>>> ${prefix}please select "continue" (${percent}%) <<<\n\n`
+                            );
+                        }
                     }
                 } else {
                     CODOMAIN.initialize(output);
