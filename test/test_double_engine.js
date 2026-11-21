@@ -90,7 +90,9 @@ const ecCode = fs.readFileSync(LIB_PATH, "utf8");
     assert.strictEqual(configCardsSlot2.length, 1, "Duplicate instance must NOT generate a second Configure card");
 
     // Diagnostic info contains warning
-    const infoOut = sandbox.AutoCards("input", "/ec -i");
+    const promptIn = sandbox.AutoCards("input", "/ec -i");
+    assert.strictEqual(promptIn.replace(/\u200D\u200B\u200C\u200B\u200D/g, ""), "/ec -i", "Input prompt must be preserved");
+    const infoOut = sandbox.AutoCards("output", "");
     assert(infoOut.includes("⚠️ [DOUBLE ENGINE DETECTED]"), "Diagnostic info must display warning banner");
     assert(infoOut.includes("Only ONE card engine is active"), "Diagnostic info must explain duplicate bypassed");
 
@@ -217,8 +219,11 @@ const ecCode = fs.readFileSync(LIB_PATH, "utf8");
 
     // 1. /ec -i piped through Slot 1 VM -> Slot 2 VM
     let step1 = runECInIsolatedVM(slot1State, "input", "/ec -i");
+    assert.strictEqual(step1.text.replace(/\u200D\u200B\u200C\u200B\u200D/g, ""), "/ec -i", "Slot 1 preserves input prompt");
     let step2 = runECInIsolatedVM(slot2State, "input", step1.text);
-    assert(step2.text.includes("⚠️ [DOUBLE ENGINE DETECTED]"), "Multi-VM: Downstream slot must detect upstream /ec -i and inject warning");
+    assert.strictEqual(slot2State._aid_double_engine_detected, true, "Multi-VM: Downstream slot must detect upstream /ec -i via input handshake");
+    let out1 = runECInIsolatedVM(slot1State, "output", "");
+    assert(out1.text.includes("/EC info ->"), "Slot 1 delivers diagnostics via output hook");
 
     // 2. Context hook piped through Slot 1 VM -> Slot 2 VM
     sharedInfo.actionCount = 6;

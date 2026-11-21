@@ -73,49 +73,79 @@ assert.strictEqual(typeof mod.version, "string");
 assert.strictEqual(typeof mod.diag, "function");
 console.log(`   ✔ AMS registration verified: ${mod.diag()}`);
 
+// Helper to strip internal zero-width cross-slot handshake tokens
+const clean = (s) => (typeof s === "string" ? s.replace(/\u200D\u200B\u200C\u200B\u200D/g, "") : s);
+
 // 2. /ec -v / --version
 {
-    const out = sandbox.AutoCards("input", "/ec -v");
-    assert(out.includes("/EC version ->"), "Expected version response for /ec -v");
-    assert(out.includes("Parser: AID-Getopt") || out.includes("Parser: GetoptAID"), "Expected parser reference in version");
-    console.log("   ✔ /ec -v displays version and AID-Getopt diagnostics");
+    const promptIn = "/ec -v";
+    const promptOut = sandbox.AutoCards("input", promptIn);
+    assert.strictEqual(clean(promptOut), promptIn, "/ec -v must preserve user prompt on input");
+    const storyOut = sandbox.AutoCards("output", "");
+    assert(storyOut.includes("/EC version ->"), "Expected version response for /ec -v on output");
+    assert(storyOut.includes("Parser: AID-Getopt") || storyOut.includes("Parser: GetoptAID"), "Expected parser reference in version");
+    console.log("   ✔ /ec -v preserves prompt on input and delivers version via output hook");
 
-    const outLong = sandbox.AutoCards("input", "/ec --version");
-    assert(outLong.includes("/EC version ->"), "Expected version response for /ec --version");
-    console.log("   ✔ /ec --version long flag parsed cleanly");
+    const promptLong = "/ec --version";
+    const promptOutLong = sandbox.AutoCards("input", promptLong);
+    assert.strictEqual(clean(promptOutLong), promptLong, "/ec --version must preserve user prompt on input");
+    const storyOutLong = sandbox.AutoCards("output", "");
+    assert(storyOutLong.includes("/EC version ->"), "Expected version response for /ec --version on output");
+    console.log("   ✔ /ec --version long flag preserved on input and delivered on output");
 }
 
 // 3. /ec -h / --help
 {
-    const out = sandbox.AutoCards("input", "/ec -h");
-    assert(out.includes("/EC help -> Entity Cards Commands:"), "Expected help manual");
-    console.log("   ✔ /ec -h displays command manual");
+    const promptIn = "/ec -h";
+    const promptOut = sandbox.AutoCards("input", promptIn);
+    assert.strictEqual(clean(promptOut), promptIn, "/ec -h must preserve user prompt on input");
+    const storyOut = sandbox.AutoCards("output", "");
+    assert(storyOut.includes("/EC help -> Entity Cards Commands:"), "Expected help manual on output");
+    console.log("   ✔ /ec -h preserves prompt on input and delivers command manual via output hook");
 }
 
 // 4. /ec -i / --info
 {
-    const out = sandbox.AutoCards("input", "/ec -i");
-    assert(out.includes("/EC info ->"), "Expected system diagnostics header");
-    assert(out.includes("Total Cards:"), "Expected card count stats");
-    console.log("   ✔ /ec -i displays diagnostic system information");
+    const promptIn = "/ec -i";
+    const promptOut = sandbox.AutoCards("input", promptIn);
+    assert.strictEqual(clean(promptOut), promptIn, "/ec -i must preserve user prompt on input");
+    const storyOut = sandbox.AutoCards("output", "");
+    assert(storyOut.includes("/EC info ->"), "Expected system diagnostics header on output");
+    assert(storyOut.includes("Total Cards:"), "Expected card count stats on output");
+    console.log("   ✔ /ec -i preserves prompt on input and delivers diagnostics via output hook");
 }
 
 // 5. Preset switching: /ec -P lite & /ec -P standard
 {
-    const out = sandbox.AutoCards("input", "/ec -P lite");
-    assert(out.includes("/EC preset -> Set to Lite"), "Expected preset switch to Lite");
-    console.log("   ✔ /ec -P lite switches preset cleanly");
+    const promptLite = "/ec -P lite";
+    const promptOutLite = sandbox.AutoCards("input", promptLite);
+    assert.strictEqual(clean(promptOutLite), promptLite, "/ec -P lite must preserve user prompt on input");
+    const storyOutLite = sandbox.AutoCards("output", "");
+    assert(storyOutLite.includes("/EC preset -> Set to Lite"), "Expected preset switch to Lite on output");
+    console.log("   ✔ /ec -P lite preserves prompt and delivers preset status via output hook");
 
-    const outStd = sandbox.AutoCards("input", "/ec -P standard");
-    assert(outStd.includes("/EC preset -> Set to Standard"), "Expected preset switch to Standard");
-    console.log("   ✔ /ec -P standard switches back to Standard");
+    const promptStd = "/ec -P standard";
+    const promptOutStd = sandbox.AutoCards("input", promptStd);
+    assert.strictEqual(clean(promptOutStd), promptStd, "/ec -P standard must preserve user prompt on input");
+    const storyOutStd = sandbox.AutoCards("output", "");
+    assert(storyOutStd.includes("/EC preset -> Set to Standard"), "Expected preset switch to Standard on output");
+    console.log("   ✔ /ec -P standard preserves prompt and delivers status via output hook");
 }
 
 // 6. Entity type flag parsing & single-branch optimization: /ec Molly -p
 {
+    // Default: old behavior (prompt rewritten with card generation request)
     const out = sandbox.AutoCards("input", "/ec Molly -p");
-    assert(out.includes("/EC {Molly} [-person] -> Success!"), "Expected card generation for Molly [-person]");
-    console.log("   ✔ /ec Molly -p parsed entity type and generated card request");
+    assert(out.includes("/EC {Molly} [-person] -> Success!"), "Expected card generation for Molly [-person] (default old behavior)");
+    console.log("   ✔ /ec Molly -p rewrites prompt by default (backward compatible)");
+
+    // Configurable: new way (preserves prompt if cleanPromptOnCardGen: true)
+    sandbox.state.AutoCards.config.cleanPromptOnCardGen = true;
+    const cleanIn = "/ec Molly -p";
+    const cleanOut = sandbox.AutoCards("input", cleanIn);
+    assert.strictEqual(clean(cleanOut), cleanIn, "Expected clean prompt preservation when cleanPromptOnCardGen is true");
+    sandbox.state.AutoCards.config.cleanPromptOnCardGen = false; // restore default
+    console.log("   ✔ cleanPromptOnCardGen config option cleanly preserves prompt during manual card generation");
 }
 
 // 7. Protected bareword titles: /ec "Info" -org
@@ -127,13 +157,19 @@ console.log(`   ✔ AMS registration verified: ${mod.diag()}`);
 
 // 8. Dialogue unwrapping: Say & Do modes
 {
-    const outSay = sandbox.AutoCards("input", 'You say, "/ec -v"');
-    assert(outSay.includes("/EC version ->"), "Expected Say-mode unwrapped execution");
-    console.log("   ✔ Say mode unwrapped: You say, \"/ec -v\"");
+    const sayIn = 'You say, "/ec -v"';
+    const outSay = sandbox.AutoCards("input", sayIn);
+    assert.strictEqual(clean(outSay), sayIn, "Say mode must preserve prompt on input");
+    const storySay = sandbox.AutoCards("output", "");
+    assert(storySay.includes("/EC version ->"), "Expected Say-mode version output");
+    console.log("   ✔ Say mode preserved on input and delivered on output");
 
-    const outDo = sandbox.AutoCards("input", "> You /ec -P lite.");
-    assert(outDo.includes("/EC preset -> Set to Lite"), "Expected Do-mode unwrapped execution");
-    console.log("   ✔ Do mode unwrapped: > You /ec -P lite.");
+    const doIn = "> You /ec -P lite.";
+    const outDo = sandbox.AutoCards("input", doIn);
+    assert.strictEqual(clean(outDo), doIn, "Do mode must preserve prompt on input");
+    const storyDo = sandbox.AutoCards("output", "");
+    assert(storyDo.includes("/EC preset -> Set to Lite"), "Expected Do-mode preset output");
+    console.log("   ✔ Do mode preserved on input and delivered on output");
 }
 
 // 9. Narrative text passthrough

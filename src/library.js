@@ -217,18 +217,21 @@ function AutoCards(inHook, inText, inStop) {
     if (inHook === "input") {
         const rawCheck = typeof inText === "string" ? inText : (typeof text === "string" ? text : "");
         // 1. Did an upstream card engine slot already process an /ec or /ac command?
-        if (/^\s*\/(?:EC|AC)\b[^\n]*->/i.test(rawCheck)) {
+        if (/^\s*\/(?:EC|AC)\b[^\n]*->/i.test(rawCheck) || (rawCheck.includes(EC_INPUT_HANDSHAKE) && /\/\s*(?:A|E)\s*C\b/i.test(rawCheck))) {
             globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
             if (typeof state === "object" && state) state._aid_double_engine_detected = true;
+            AutoCards._isBypassed = true;
             writeCrossSlotStamp({ t: turnKey, p: "input", u: "upstream", c: 1 });
-            if (rawCheck.includes("=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===") && !rawCheck.includes("DOUBLE ENGINE DETECTED")) {
-                const warnBanner = `  ⚠️ [DOUBLE ENGINE DETECTED]: Both standalone Entity-Cards and All-in-One Inner-Entity are loaded!\n`
-                    + `     -> Only ONE card engine is active (duplicate was automatically bypassed to protect story cards).\n`
-                    + `     -> Fix: In Script Manager, use 'inner-self-minds-only.js' for the minds slot to optimize memory.\n`;
-                return rawCheck.replace(
-                    "=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n",
-                    "=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n" + warnBanner
-                );
+            if (!rawCheck.includes("DOUBLE ENGINE DETECTED")) {
+                const warnBanner = `  ⚠️ [DOUBLE ENGINE DETECTED]: Both standalone Entity-Cards and an upstream card engine are loaded!\n`
+                    + `     -> Only ONE card engine is active (downstream duplicate was automatically bypassed).\n`;
+                if (rawCheck.includes("=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===")) {
+                    return rawCheck.replace(
+                        "=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n",
+                        "=== INNER ENTITY / AUTO-CARDS DIAGNOSTICS ===\n" + warnBanner
+                    );
+                }
+                return rawCheck + "\n" + warnBanner;
             }
             return rawCheck;
         }
@@ -370,6 +373,9 @@ function AutoCards(inHook, inText, inStop) {
     // [*EC] Display the card raw prompt and response for debugging?
     let DEFAULT_EC_SHOW_DEBUG_RAWAI_ENTRY = false
     let DEFAULT_EC_SHOW_DEBUG_RAWAI_MEMORY = false
+
+    // [*EC] Preserve player input prompt on manual card generation (/ec <Title>) instead of rewriting prompt?
+    let DEFAULT_EC_CLEAN_PROMPT_ON_CARD_GEN = false
 
     // [*EC] Preset dictionaries for Entity Cards prompts
     const EC_PRESETS = {
@@ -1443,6 +1449,9 @@ description: {1 concise sentence narrative summary}
                 return null;
             }
         })();
+        if (ac?.config) {
+            ac.config.cleanPromptOnCardGen ??= false;
+        }
         // If the deserialized state fails to match the following structure, fallback to defaults
         if (validate(ac, O.f({
             config: [
@@ -1453,7 +1462,7 @@ description: {1 concise sentence narrative summary}
                 "operatingMode", "ECContextHeader", "autoTypeCards", "trimPhraseFragStory", "trimDelimiterFragStory", "stripAsterisksStory", "prettifyEmDashesStory", "normalizeWhitespaceStory",
                 "SCContainerize", "SCContainerOpen", "SCContainerClose", "SCContainerAIBeginSentinel", "SCContainerAIEndSentinel",
                 "showDebugData", "showDebugDataSCRawAIEntry", "showDebugDataSCRawAIMemory", "generationPrompt", "compressionPrompt", "defaultCardType",
-                "ECPreset", "ECAutoPreset", "manualBypassTitleFilters", "filterCommonEntities"
+                "ECPreset", "ECAutoPreset", "manualBypassTitleFilters", "filterCommonEntities", "cleanPromptOnCardGen"
             ],
             signal: [
                 "emergencyHalt", "forceToggle", "overrideBans", "swapControlCards", "recheckRetryOrErase", "maxChars", "outputReplacement", "upstreamError"
@@ -6337,7 +6346,8 @@ description: {1 concise sentence narrative summary}
                 DEFAULT_CARD_MEMORY_COMPRESSION_PROMPT,
                 "string"
             ),
-            defaultCardType: "auto-card"
+            defaultCardType: "auto-card",
+            cleanPromptOnCardGen: check(DEFAULT_EC_CLEAN_PROMPT_ON_CARD_GEN, false)
         });
     }
     function getDefaultConfigBans() {
@@ -6564,7 +6574,8 @@ description: {1 concise sentence narrative summary}
             "> Strip card asterisks: " + AC.config.stripAsterisksCards,
             "> Prettify card em dashes: " + AC.config.prettifyEmDashesCards,
             "> Log raw ai entry data: " + AC.config.showDebugDataSCRawAIEntry,
-            "> Log raw ai memory data: " + AC.config.showDebugDataSCRawAIMemory
+            "> Log raw ai memory data: " + AC.config.showDebugDataSCRawAIMemory,
+            "> Clean prompt on card generation: " + AC.config.cleanPromptOnCardGen
         );
     }
     function getECConfigureCardDescription() {
@@ -6761,6 +6772,9 @@ description: {1 concise sentence narrative summary}
             if (typeof settings.lograwaimemorydata === "boolean") {
                 AC.config.showDebugDataSCRawAIMemory = settings.lograwaimemorydata;
             }
+            if (typeof settings.cleanpromptoncardgeneration === "boolean") {
+                AC.config.cleanPromptOnCardGen = settings.cleanpromptoncardgeneration;
+            }
             ecCard.entry = getECConfigureCardEntry();
             ecCard.description = getECConfigureCardDescription();
         }
@@ -6887,6 +6901,8 @@ description: {1 concise sentence narrative summary}
     }
     function doPlayerCommands(input) {
         let result = "";
+        let isGetoptCommand = false;
+        let isCardGenCommand = false;
         const chunks = input.split(/(?=\/\s*(?:A|E)\s*C)/i);
         let cumulativeOffset = 0;
         for (let i = 0; i < chunks.length; i++) {
@@ -6927,11 +6943,17 @@ description: {1 concise sentence narrative summary}
             );
             if (!requestTitle) {
                 // Request with no args
+                isCardGenCommand = true;
                 AC.generation.cooldown = 0;
                 result += `/${cmdPrefix} -> Card generation triggered!\n\n`;
                 logEvent(`/${cmdPrefix}`);
             } else {
                 const cli = parseCommandLine(requestTitle);
+                if (cli.flags.version || cli.flags.help || cli.flags.info || cli.flags.mode !== undefined || cli.flags.preset !== undefined || cli.flags.header !== undefined || cli.flags.redoAll || (!cli.title && (cli.flags.entityType || cli.flags.redo))) {
+                    isGetoptCommand = true;
+                } else {
+                    isCardGenCommand = true;
+                }
                 const getoptDiag = (typeof globalThis.AIDGetopt?.diag === "function")
                     ? globalThis.AIDGetopt.diag()
                     : (typeof globalThis.GetoptAID?.diag === "function")
@@ -7179,6 +7201,24 @@ description: {1 concise sentence narrative summary}
                     }
                 }
             }
+            if (isGetoptCommand) {
+                AC.signal.outputReplacement = result.trimEnd();
+                if (typeof state !== "undefined") {
+                    state._aid_system_command = true;
+                }
+                return input.includes(EC_INPUT_HANDSHAKE) ? input : (input + EC_INPUT_HANDSHAKE);
+            }
+            if (isCardGenCommand && AC.config.cleanPromptOnCardGen) {
+                if (isPendingGeneration() || isAwaitingGeneration() || isPendingCompression()) {
+                    if (AC.config.doAC) {
+                        AC.signal.outputReplacement = "";
+                    } else {
+                        AC.signal.forceToggle = true;
+                        AC.signal.outputReplacement = ">>> please select \"continue\" (0%) <<<";
+                    }
+                }
+                return input;
+            }
             if (isPendingGeneration() || isAwaitingGeneration() || isPendingCompression()) {
                 if (AC.config.doAC) {
                     AC.signal.outputReplacement = "";
@@ -7282,6 +7322,9 @@ description: {1 concise sentence narrative summary}
     function endTurn() {
         AC.database.titles.used = [];
         AC.signal.outputReplacement = "";
+        if (typeof state !== "undefined") {
+            delete state._aid_system_command;
+        }
         [AC.database.titles.pendingBans, AC.database.titles.pendingUnbans].map(pending => decrementAll(pending));
         if (0 < AC.signal.overrideBans) {
             AC.signal.overrideBans--;
