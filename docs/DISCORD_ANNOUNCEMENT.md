@@ -33,13 +33,38 @@ https://github.com/viosca/Entity-Cards
 
 ---
 
-## Part 2: Suggested Edits for the Thread Original Post (OP)
+## Part 2: Improved Original Post (OP) for the Thread
 
-When updating the top post of the thread:
-1. Update version to **v2.8.0-EC**.
-2. Add `/ec -a`, `/ec --abort`, and `/ec cancel` to the command cheat sheet.
-3. Add a note about the new companion card options: `cleanPromptOnCardGen` and `progressDisplay`.
-4. Link to `DYNAMIC_SLOT_MANAGEMENT_GUIDE.md` for creators using multi-slot script architectures.
+*Character count: ~1,960 characters (Discord limit: 2,000)*
+
+```markdown
+📇 **[RELEASE] Entity Cards (NER) v2.8.0 — Automated Named Entity Recognition & Living World Lore**
+*An extension of LewdLeah's legendary Auto-Cards engine ❤️ by Randy Viosca (@Random_Variable)*
+
+**Entity Cards** extends Auto-Cards with structured Named Entity Recognition (NER), 4-letter MBTI profiles, calibrated YAML schemas, and cross-slot coordination!
+
+🌟 **Key Capabilities:**
+• **5 Typed Entity Schemas:** Indexes **Person** (with 4-letter MBTI), **Location**, **Organization**, **Thing**, and **Event**.
+• **MBTI Psychological Grounding:** Packs behavioral depth and dialogue consistency into 4 to 8 tokens.
+• **100-Token Slider Calibrated:** Schemas complete in a single turn (~94 tokens) under AID's default response slider.
+• **Abort Controls & Diagnostics:** Cancel active card generations anytime with `/ec -a` (or `/ec cancel`), with clear feedback for queued or invalid titles.
+• **Prompt Preservation & Toasts:** Set `cleanPromptOnCardGen` to keep story prompts intact, and `progressDisplay: toast` to show progress without cluttering story text.
+• **Cross-Slot Coordination (CSCP):** Suppresses background NPC thoughts (like Inner-Entity) during card compilation, preventing corrupted story cards!
+• **Two-Card Configuration:** Master *Configure Auto-Cards* card for cooldowns + Companion *Configure Entity Cards* card for live editable templates.
+• **100% Backward Compatible:** Switch back to Classic Auto-Cards prose mode anytime via `/ec -m classic`.
+
+🎮 **Quick Commands:**
+• `/ec <Title> -<type>` — Generate with explicit type (`-p`, `-loc`, `-org`, `-item`, `-event`)
+• `/ec -a` — Cancel active card generation
+• `/ec -P <preset>` — Switch schema presets (`standard`, `lite`, `authoring`, `custom`)
+• `/ec -i` — Cognitive engine diagnostics & card counts
+
+🔗 **Add to your Scenario (Script Loader):**
+https://play.aidungeon.com/script/05_w3s9zrrvt/entity-cards-ner
+
+📖 **GitHub & Documentation:**
+https://github.com/viosca/Entity-Cards
+```
 
 ---
 
