@@ -61,6 +61,7 @@ You can use either `/ec` or `/ac` in the AI Dungeon action input bar:
 | `/ec <Title> / {Details}` | Generates a card for a title with additional guidance details |
 | `/ec -r, --redo <Title> [ -<type> ]` | Regenerates an existing story card, optionally overriding its type (legacy alias: `/ec redo <Title>`) |
 | `/ec -R, --redo-all` | Regenerates all automatic story cards (legacy alias: `/ec redo all`) |
+| `/ec -a, --abort, cancel` | Terminates active card generation or memory compression in progress, resetting cooldowns and clearing task cards |
 | `/ec -m, --mode <mode>` | Switches engine mode: `-m entity` (NER, YAML schemas) or `-m classic` (prose prompt, bulleted lists) |
 | `/ec -P, --preset <name>` | Switches YAML schema preset: `-P standard`, `-P lite`, `-P authoring`, or `-P custom` |
 | `/ec --header <text>` | Sets a custom context header (e.g., `/ec --header "Codex Entities:"`) |
@@ -90,6 +91,21 @@ When manually generating or redoing a card, you can specify the entity type usin
 > **Token Optimization:** When an entity flag is provided, Entity-Cards dynamically isolates only the single matching JellyFish template branch, discarding the other 4 branches. This reduces the AI prompt from ~2,713 characters (~550 tokens) down to ~640 characters (~130 tokens)—an **~75–80% prompt token reduction** while eliminating schema hallucination! Hyphenated names (e.g., `Spider-Man` or `Top-Secret Facility`) are safely preserved.
 >
 > **Dialogue & Flame Menu Support:** Commands can be typed directly into Story or Do mode, or spoken naturally in Say mode dialogue (e.g. `> You say, "/ec -p Molly."` or `Joe says, "/ec -loc Citadel!"`). Punctuation, smart quotes, and dialogue wrappers are automatically stripped.
+
+### Specific Card Rejection Diagnostics
+
+When a manual `/ec <Title>` or `/ec -r <Title>` command cannot generate a card, Entity Cards explains the exact reason rather than giving a generic error:
+* **Trigger Key Collision:** If the requested name is already claimed as a trigger keyword on another card (e.g., `/ec -p brenner` when "Dr. Martin Brenner" uses `brenner` as a trigger), it reports:  
+  `"brenner" is already used as a trigger key in Story Card "Dr. Martin Brenner"`
+* **Existing Card Match:** If an exact title match or embedded `{title: ...}` already exists:  
+  `Story Card "Brenner" already exists`
+* **Active Workpiece:** If the card is currently in progress:  
+  `Card generation for "Brenner" is already in progress`
+* **Pending Queue:** If the title is already waiting in the generation queue:  
+  `"Brenner" is already queued in pending generation`
+* **Reserved System Keywords:** System names like `entity`, `inner`, or `agent` are protected:  
+  `"entity" is a reserved system keyword`
+* **Length & Formatting:** Enforces a minimum of 2 characters for manual commands (3 for automatic detection).
 
 ### Sample Generated Entity Card
 
@@ -132,11 +148,18 @@ Dedicated to Named Entity Recognition and prompt customization:
 * `> Active Preset:` `Standard`, `Lite`, `Authoring`, or `Custom`
 * `> Auto-select preset by model:` Automatically adapts schema complexity based on your active AI Dungeon model
 * `> Context Header:` Custom header replacing `"World Lore:"` in context (default: `"Named Entities (NER):"`)
+* `> Clean prompt on card generation:` Strips manual `/ec` command lines from story text upon submission (`true`/`false`, default `true`)
+* `> Progress display:` Selects progress display mode: `story` (inline `>>> please select "continue" (50%) <<<` banners) or `toast` (transient `state.message` toasts)
 * `> Live Editable Template Blocks:` Edit the card's description to customize prompt schemas directly in-game; editing automatically switches the preset to **Custom**!
 
 > [!TIP]
-> **AI Dungeon Response Length:**  
-> Setting your in-game **Response Length** slider to **250+ tokens** in AI Dungeon's gameplay settings allows complete Entity Cards to generate in a single turn. With shorter response length settings (e.g. 50–100 tokens), the script will automatically pause and prompt you with `>>> please select "continue" <<<` to construct the entity template across multiple turns.
+> **Multi-Turn Continuation & Response Length:**  
+> Setting your in-game **Response Length** slider to **250+ tokens** in AI Dungeon's gameplay settings allows complete Entity Cards to generate in a single turn. With shorter response length settings (e.g. 50–100 tokens), the script seamlessly pauses and prompts you with `>>> please select "continue" (X%) <<<` to construct the entity template across multiple turns.
+> 
+> During multi-turn generation:
+> 1. Incomplete YAML fields are cleanly merged across turns while stripping narrative hallucination.
+> 2. Story prose and NPC monologue scripts (such as `Inner-Entity`) are automatically paused across VMs, preventing narrative bleed into `Continue` clicks until the card reaches **100% completion**.
+> 3. Once complete, Entity Cards announces the addition and leaves story narration ready for your next normal player action.
 
 ---
 
