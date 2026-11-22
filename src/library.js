@@ -173,10 +173,10 @@ function AutoCards(inHook, inText, inStop) {
     // Cross-Slot Coordination Protocol (CSCP) Announce & Capability Check
     let cscpYielded = false;
     let cscpActive = false;
+    const isLifecycleHook = (inHook === "input" || inHook === "context" || inHook === "output");
     try {
         const cscp = typeof loadCSCP === "function" ? loadCSCP() : null;
-        if (!isBundledInstance && cscp && typeof cscp.announce === "function") {
-            const hookPhase = (inHook === "input" || inHook === "context" || inHook === "output") ? inHook : "init";
+        if (!isBundledInstance && isLifecycleHook && cscp && typeof cscp.announce === "function") {
             const cscpRes = cscp.announce({
                 name: "entity-cards",
                 displayName: "EntityCards",
@@ -187,7 +187,7 @@ function AutoCards(inHook, inText, inStop) {
                 commands: ["/ec", "/ac"],
                 description: "Autonomous story cards and named entity recognition for characters & lore",
                 helpSummary: "Autonomous story cards and lore generation (/ec <title>, /ec redo, /ec info)"
-            }, { phase: hookPhase, slotUid });
+            }, { phase: inHook, slotUid });
 
             if (cscpRes) {
                 cscpActive = true;
@@ -4054,11 +4054,14 @@ description: {1 concise sentence narrative summary}
                 state.InnerSelf.AC ??= {};
                 state.InnerSelf.AC.event = true;
                 context = context.replaceAll(isGenerating ? "%@GEN@%" : "%@COM@%", "");
+                // Remove any upstream Inner Entity / Inner Self thought task prompt if Inner Entity ran in an earlier slot
+                context = context.replace(/<SYSTEM>\s*#\s*OPERATING ENVIRONMENT[\s\S]*?<\/SYSTEM>\s*/gi, "");
+                deactivateInnerEntityThoughtCard();
+                const targetTitle = isGenerating ? AC.generation.workpiece.title : AC.compression.vanityTitle;
                 if (isCacheEfficient()) {
-                    const targetTitle = isGenerating ? AC.generation.workpiece.title : AC.compression.vanityTitle;
                     writeOCTaskCard(formatOCTaskPrompt(activeTaskPrompt), targetTitle, TEXT);
                 } else {
-                    deactivateOCTaskCard();
+                    markOCTaskCardActiveNonOC(targetTitle);
                 }
             } else {
                 deactivateOCTaskCard();
@@ -4275,121 +4278,175 @@ description: {1 concise sentence narrative summary}
                         const endSentinel = AC.config.SCContainerAIEndSentinel || "ENTITY_END";
                         const hasSentinel = (beginSentinel !== "" && TEXT.includes(beginSentinel))
                             || (endSentinel !== "" && TEXT.includes(endSentinel));
-                        const hasYamlKey = /(?:^|\n)\s*(?:entity|type|category|role|mbti|appearance|personality|description|atmosphere|key_locations|key_points|connections|agenda|status|stakes|bearer|physical|function|rules|stance|true_agenda|public_face)\s*:/i.test(TEXT);
-                        const hasDialogueOrSpeech = textClone.includes("\"") || /(?<=^|\s|—|\(|\[|{)sa(ys?|id)(?=\s|\.|\?|!|,|;|—|\)|\]|}|$)/i.test(textClone);
+                        const schemaKeyPattern = "entity|type|category|role|mbti|appearance|personality|description|drive|secrets|scene_dynamics|reach|powers_or_risk|key_actors|atmosphere|key_locations|key_points|connections|agenda|status|stakes|bearer|physical|function|rules|stance|true_agenda|public_face";
+                        const hasYamlKey = new RegExp(`(?:^|\\n)\\s*[-—–]?\\s*(?:${schemaKeyPattern})\\s*:`, "i").test(TEXT);
 
                         const cardTitle = AC.generation.workpiece.title;
                         const explicitType = AC.generation.workpiece.explicitType;
-                        const primedPrefix = explicitType
-                            ? `${beginSentinel}\nentity: ${cardTitle}\ntype: ${explicitType}\n`
-                            : `${beginSentinel}\nentity: ${cardTitle}\n`;
-                        const isStartingCard = (AC.generation.workpiece.entry.trim() === primedPrefix.trim() || AC.generation.workpiece.entry.trim() === "");
 
-                        // Discard story prose fallbacks if the AI ignored directives and continued normal narration
-                        if (isStartingCard && !hasSentinel && !hasYamlKey) {
+                        // Discard story prose fallbacks on ANY turn if the AI ignored directives and output pure narration without sentinels or YAML keys
+                        if (!hasSentinel && !hasYamlKey) {
                             if (AC.config.showDebugDataSCRawAIEntry) {
-                                logEvent("outputModifier: Discarded narrative prose output on card generation start");
+                                logEvent("outputModifier: Discarded narrative prose output during entity card generation");
                             }
                             return skip(estimateRemainingGens());
-                        }
-                        if (!hasSentinel && !hasYamlKey && hasDialogueOrSpeech) {
-                            if (AC.config.showDebugDataSCRawAIEntry) {
-                                logEvent("outputModifier: Discarded dialogue/speech output during entity card generation");
-                            }
-                            return skip(estimateRemainingGens());
-                        }
-
-                        // Combine workpiece entry with incoming TEXT, handling potential restarts or overlaps
-                        const trimmedText = TEXT.trimStart();
-                        if (AC.generation.workpiece.entry.trim() === primedPrefix.trim()) {
-                            if (beginSentinel !== "" && trimmedText.includes(beginSentinel)) {
-                                AC.generation.workpiece.entry = trimmedText;
-                            } else if (cardTitle && new RegExp(`^entity:\\s*${Internal.escapeRegExp(cardTitle)}\\s*`, 'i').test(trimmedText)) {
-                                AC.generation.workpiece.entry = `${beginSentinel}\n` + trimmedText;
-                            } else if (explicitType && new RegExp(`^type:\\s*${Internal.escapeRegExp(explicitType)}\\s*`, 'i').test(trimmedText)) {
-                                AC.generation.workpiece.entry = `${beginSentinel}\nentity: ${cardTitle}\n` + trimmedText;
-                            } else {
-                                AC.generation.workpiece.entry += TEXT;
-                            }
-                        } else if (!AC.generation.workpiece.entry.endsWith("\n") && /^[-—–]?\s*[a-z_][a-z0-9_ ]*:/i.test(trimmedText)) {
-                            AC.generation.workpiece.entry = AC.generation.workpiece.entry.trimEnd() + "\n" + trimmedText;
-                        } else {
-                            AC.generation.workpiece.entry += TEXT;
                         }
 
                         let sawEndSentinel = false;
-                        if (AC.config.SCContainerAIEndSentinel !== "") {
-                            const endSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIEndSentinel);
+                        if (endSentinel !== "") {
+                            const endSentinelEscaped = Internal.escapeRegExp(endSentinel);
                             const endSentinelRx = new RegExp("(?:\\n[\\s#*>`_\\-]*|\\s*)" + endSentinelEscaped + "[\\s\\S]*$", "i");
-                            // If defined, replace the end sentinel and any leading ws and bullet followed by any character to the end of input.
-                            sawEndSentinel = endSentinelRx.test(AC.generation.workpiece.entry);
-                            if (sawEndSentinel) {
-                                AC.generation.workpiece.entry = AC.generation.workpiece.entry.replace(endSentinelRx, "");
+                            if (endSentinelRx.test(TEXT) || endSentinelRx.test(AC.generation.workpiece.entry)) {
+                                sawEndSentinel = true;
                             }
                         }
 
-                        // Remove begin sentinel and any preceding preamble immediately whenever it appears (greedy to eliminate all preambles/duplicates)
-                        if (AC.config.SCContainerAIBeginSentinel !== "") {
-                            const beginSentinelEscaped = Internal.escapeRegExp(AC.config.SCContainerAIBeginSentinel);
-                            const beginSentinelRx = new RegExp("^[\\s\\S]*" + beginSentinelEscaped + "[*`\\s]*", "i");
-                            AC.generation.workpiece.entry = AC.generation.workpiece.entry.replace(beginSentinelRx, "");
+                        // Strip any narrative preamble before beginSentinel in incoming TEXT
+                        let incomingClean = TEXT;
+                        if (beginSentinel !== "") {
+                            const bIdx = incomingClean.toUpperCase().indexOf(beginSentinel.toUpperCase());
+                            if (bIdx !== -1) {
+                                incomingClean = incomingClean.slice(bIdx);
+                            }
                         }
 
-                        // Strip leading and trailing code fences (e.g. ```yaml, ```, '''yaml, ''')
-                        AC.generation.workpiece.entry = AC.generation.workpiece.entry
-                            .replace(/^\s*(?:```|''')(?:yaml)?\s*/i, "")
-                            .replace(/\s*(?:```|''')\s*$/i, "");
+                        // Helper to parse an entry/chunk into ordered YAML key->block pairs while preserving multi-line list items
+                        const knownSchemaKeys = new Set(schemaKeyPattern.split("|"));
+                        function extractYamlBlocks(rawChunk, allowLeadingContinuation) {
+                            let cleaned = String(rawChunk || "");
+                            if (endSentinel !== "") {
+                                const endRx = new RegExp("(?:\\n[\\s#*>`_\\-]*|\\s*)" + Internal.escapeRegExp(endSentinel) + "[\\s\\S]*$", "i");
+                                cleaned = cleaned.replace(endRx, "");
+                            }
+                            if (beginSentinel !== "") {
+                                const beginGlobalRx = new RegExp(Internal.escapeRegExp(beginSentinel) + "[*`\\s]*", "gi");
+                                cleaned = cleaned.replace(beginGlobalRx, "\n");
+                            }
+                            cleaned = cleaned
+                                .replace(/^\s*(?:```|''')(?:yaml)?\s*/gmi, "")
+                                .replace(/\s*(?:```|''')\s*$/gmi, "")
+                                .replace(/\s*\/\/[^\n]*\n/gm, "")
+                                .replace(/(?<=\d)"/g, "")
+                                .replace(/^[—–]\s*/gm, "- ")
+                                .replace(/\s*-\s+(?=[^\n]+:)/g, "\n- ");
 
-                        // We do some cleanup between generations to keep the AI from developing bad patterns.
-                        AC.generation.workpiece.entry = AC.generation.workpiece.entry
-                            .replace(/\s*\/\/[^\n]*\n/gm, '') // Strip out any JavaScript line style comments.
-                            .replace(/(?<=\d)"/g, '') // clean up measurements to remove double quotes.
-                            .replace(/^[—–]\s*/gm, "- ") // normalize em-dash bullets
-                            .replace(/\s*-\s+(?=[^\n]+:)/g, "\n- ") // clean up dashed list items so they're on their own lines.
-                            ;
-                        //logEvent("outputModifier: workpiece.entry/after subst: " + AC.generation.workpiece.entry);
+                            const lines = cleaned.split(/\r?\n/);
+                            const blocks = [];
+                            let leadingContinuation = "";
 
-                        // Now clean up sentence, and delimiter frags and remove asterisks.
-                        AC.generation.workpiece.entry = 
+                            for (let line of lines) {
+                                const trimmed = line.trim();
+                                if (!trimmed) continue;
+
+                                const keyMatch = trimmed.match(/^([-—–]?\s*)([a-z_][a-z0-9_ ]*)\s*:\s*(.*)$/i);
+                                if (keyMatch) {
+                                    const hasBullet = keyMatch[1].trim().length > 0;
+                                    const keyCandidate = keyMatch[2].trim().toLowerCase();
+                                    const isTopLevelKey = knownSchemaKeys.has(keyCandidate) || (!hasBullet && blocks.length > 0 && !["key_locations", "key_points"].includes(blocks[blocks.length - 1].key));
+                                    if (isTopLevelKey) {
+                                        blocks.push({ key: keyCandidate, text: trimmed });
+                                        continue;
+                                    }
+                                }
+
+                                if (blocks.length > 0) {
+                                    if (/^[-—–]\s+/.test(trimmed)) {
+                                        blocks[blocks.length - 1].text += "\n" + trimmed;
+                                    } else if (!/[.!?]["']?$/.test(blocks[blocks.length - 1].text)) {
+                                        blocks[blocks.length - 1].text += " " + trimmed;
+                                    }
+                                } else if (allowLeadingContinuation) {
+                                    leadingContinuation += (leadingContinuation ? " " : "") + trimmed;
+                                }
+                            }
+                            return { blocks, leadingContinuation };
+                        }
+
+                        const existingParsed = extractYamlBlocks(AC.generation.workpiece.entry, false);
+                        const incomingParsed = extractYamlBlocks(incomingClean, true);
+
+                        const fieldMap = new Map();
+                        for (const b of existingParsed.blocks) {
+                            fieldMap.set(b.key, b.text);
+                        }
+                        if (!fieldMap.has("entity") && cardTitle) {
+                            fieldMap.set("entity", `entity: ${cardTitle}`);
+                        }
+                        if (!fieldMap.has("type") && explicitType) {
+                            fieldMap.set("type", `type: ${explicitType}`);
+                        }
+
+                        let addedOrGrew = false;
+                        if (incomingParsed.leadingContinuation && existingParsed.blocks.length > 0) {
+                            const lastKey = existingParsed.blocks[existingParsed.blocks.length - 1].key;
+                            if (lastKey !== "entity" && lastKey !== "type") {
+                                const prevVal = fieldMap.get(lastKey) || "";
+                                if (!prevVal.includes(incomingParsed.leadingContinuation)) {
+                                    fieldMap.set(lastKey, (prevVal + " " + incomingParsed.leadingContinuation).trim());
+                                    addedOrGrew = true;
+                                }
+                            }
+                        }
+
+                        for (const b of incomingParsed.blocks) {
+                            if (!fieldMap.has(b.key)) {
+                                fieldMap.set(b.key, b.text);
+                                addedOrGrew = true;
+                            } else {
+                                const prev = fieldMap.get(b.key);
+                                if (b.text.length > prev.length) {
+                                    fieldMap.set(b.key, b.text);
+                                    addedOrGrew = true;
+                                }
+                            }
+                        }
+
+                        let mergedBody = Array.from(fieldMap.values()).join("\n");
+
+                        // Clean up sentence/delimiter fragments and remove asterisks
+                        mergedBody =
                             Internal.normalizeWhitespace(
                                 Internal.trimPhraseFragIf(AC.config.trimPhraseFragCards,
                                     Internal.trimDelimiterFragIf(AC.config.trimDelimiterFragCards,
                                         Internal.prettifyEmDashesIf(AC.config.prettifyEmDashesCards,
                                             Internal.stripAsterisksIf(AC.config.stripAsterisksCards,
-                                                AC.generation.workpiece.entry
+                                                mergedBody
                                             )
                                         )
                                     )
                                 )
-                            )
-                        ;
+                            );
 
                         // Define the regular expression for entity type detection (bullet-agnostic, quote-tolerant)
                         const entityTypeRegex = /(?:^|\n)[-—–]?\s*Type:\s*["']?([^,\n"']+)/mi;
-                        const entityTypeMatch = AC.generation.workpiece.entry.match(entityTypeRegex);
+                        const entityTypeMatch = mergedBody.match(entityTypeRegex);
                         const entityType = AC.generation.workpiece.explicitType || ((AC.config.autoTypeCards && entityTypeMatch) ? entityTypeMatch[1].trim() : (AC.generation.workpiece.type || AC.config.defaultCardType));
-                        
-                        // Check if the entity has finished: either via end sentinel or completed Description field
-                        // All 5 core NER schemas terminate with "Description: <text>."
-                        const hasFinishedDescription = /(?:^|\n)[-—–]?\s*Description:\s*[\s\S]+?[\.!\?]["']?\s*$/i.test(AC.generation.workpiece.entry.trim());
 
-                        // If the end sentinel was seen or the final Description field is complete, we're done.
-                        if (sawEndSentinel || hasFinishedDescription) {
-                            // The AI signaled the end of the entry.
-                            //logEvent("outputModifier: Saw the end sentinel or completed description, skipping end.");
-                            // The final cleanup happens in the card generation.
-                            try { AC.generation.workpiece.type = entityType; } catch (_) {}
-                            return 0; // Causes a skip to end.
-                        }
+                        // Check if the entity has finished:
+                        // 1) Explicit end sentinel seen
+                        // 2) Completed Description field
+                        // 3) Model stalled on continuation turn (completed >= 2, no new YAML fields added, and already has >= 4 valid YAML fields)
+                        const hasFinishedDescription = /(?:^|\n)[-—–]?\s*Description:\s*[\s\S]+?[\.!\?]["']?\s*$/i.test(mergedBody.trim());
+                        const stalledWithValidCard = (AC.generation.completed >= 2 && !addedOrGrew && fieldMap.size >= 4);
 
-                        // Now check that we're not overflowing the entry.
-                        const entrySize = AC.generation.workpiece.entry.length - Internal.SCContainerSentinelSize();
-                        //logEvent("workpiece length: " + entrySize);
-                        if (entrySize > AC.config.defaultEntryLimit ) {
-                            //logEvent("outputModifier: Got max entry length, skipping end."); //
+                        if (sawEndSentinel || hasFinishedDescription || stalledWithValidCard) {
+                            AC.generation.workpiece.entry = mergedBody;
                             try { AC.generation.workpiece.type = entityType; } catch (_) {}
                             return 0;
                         }
+
+                        // Check that we're not overflowing the entry limit
+                        const entrySize = mergedBody.length - Internal.SCContainerSentinelSize();
+                        if (entrySize > AC.config.defaultEntryLimit) {
+                            AC.generation.workpiece.entry = mergedBody;
+                            try { AC.generation.workpiece.type = entityType; } catch (_) {}
+                            return 0;
+                        }
+
+                        // Preserve beginSentinel at the top of workpiece.entry while continuation turns remain
+                        AC.generation.workpiece.entry = (beginSentinel !== "")
+                            ? `${beginSentinel}\n${mergedBody}\n`
+                            : `${mergedBody}\n`;
                         return skip(estimateRemainingGens());
                     }
 
@@ -4881,8 +4938,14 @@ description: {1 concise sentence narrative summary}
                 }
             }
             AC.signal.forceToggle = null;
-            deactivateOCTaskCard();
             let context = TEXT;
+            if (isAwaitingGeneration() || isPendingGeneration() || isPendingCompression() || (AC.signal.outputReplacement !== "")) {
+                context = context.replace(/<SYSTEM>\s*#\s*OPERATING ENVIRONMENT[\s\S]*?<\/SYSTEM>\s*/gi, "");
+                deactivateInnerEntityThoughtCard();
+                markOCTaskCardActiveNonOC(AC.generation.pending[0]?.title || AC.generation.workpiece?.title || "card");
+            } else {
+                deactivateOCTaskCard();
+            }
             if ((AC.config.operatingMode === "entity") && (AC.config.ECContextHeader)) {
                 context = context.replace(/^World Lore:$/m, AC.config.ECContextHeader);
             }
@@ -7996,6 +8059,46 @@ description: {1 concise sentence narrative summary}
         }
         return Array.from(keySet).join(",");
     }
+    function deactivateInnerEntityThoughtCard() {
+        try {
+            if (!Array.isArray(storyCards)) return;
+            for (const card of storyCards) {
+                if (!card || (
+                    card.title !== "\uD83E\uDDE0 Inner Entity Task — do not edit"
+                    && card.title !== "\uD83E\uDDE0 Inner Self Task — do not edit"
+                )) continue;
+                card.keys = "";
+                card.entry = "";
+            }
+        } catch (_) {}
+    }
+    function markOCTaskCardActiveNonOC(targetTitle) {
+        try {
+            if (!Array.isArray(storyCards)) return;
+            let card = storyCards.find(c => c && (
+                c.title === AC_OC_CARD_TITLE
+                || c.title === "\uD83D\uDDC2\uFE0F Entity Cards Task — do not edit"
+            ));
+            if (!card) {
+                addStoryCard("%@%");
+                const idx = storyCards.findIndex(c => c && (c.title === "%@%" || c.keys === "%@%"));
+                if (idx !== -1) {
+                    card = storyCards[idx];
+                    const targetIdx = Math.min(newCardIndex(), storyCards.length - 1);
+                    if (idx !== targetIdx && targetIdx >= 0) {
+                        storyCards.splice(idx, 1);
+                        storyCards.splice(targetIdx, 0, card);
+                    }
+                }
+            }
+            if (!card || typeof card !== "object") return;
+            card.type = card.type || "class";
+            card.title = AC_OC_CARD_TITLE;
+            card.keys = "";
+            card.entry = "";
+            card.description = "[AC_EVENT_ACTIVE] Generating card for \"" + String(targetTitle || "") + "\" via standard context.";
+        } catch (_) {}
+    }
     function writeOCTaskCard(body, targetTitle, sourceText) {
         try {
             if (!Array.isArray(storyCards)) return;
@@ -8026,7 +8129,7 @@ description: {1 concise sentence narrative summary}
             card.title = AC_OC_CARD_TITLE;
             card.keys = keys;
             card.entry = cleanBody;
-            card.description = "[Auto-Cards Optimize Context Task] Active for \"" + String(targetTitle || "") + "\" (" + card.entry.length + " chars).\n"
+            card.description = "[Auto-Cards Optimize Context Task] [AC_EVENT_ACTIVE] Active for \"" + String(targetTitle || "") + "\" (" + card.entry.length + " chars).\n"
                 + "Automatically populated during card generation/compression while AI Dungeon's Optimize Context setting is enabled, and cleared immediately once finished.";
             for (const pinProp of ["pinned", "isPinned", "pin", "sticky", "alwaysOn", "alwaysActive"]) {
                 if (storyCards.some(c => c && (typeof c[pinProp] === "boolean"))) {
@@ -8044,7 +8147,7 @@ description: {1 concise sentence narrative summary}
                     card.title !== AC_OC_CARD_TITLE
                     && card.title !== "\uD83D\uDDC2\uFE0F Entity Cards Task — do not edit"
                 )) continue;
-                if (card.keys === "" && card.entry === "") continue;
+                if (card.keys === "" && card.entry === "" && !(typeof card.description === "string" && card.description.includes("[AC_EVENT_ACTIVE]"))) continue;
                 card.title = AC_OC_CARD_TITLE;
                 card.keys = "";
                 card.entry = "";
@@ -8066,7 +8169,7 @@ description: {1 concise sentence narrative summary}
             const tailSection = afterSys
                 ? "\n\n" + (/^(?:continue|write|summarize|complete|#)/i.test(afterSys)
                     ? afterSys
-                    : "# Complete or continue this entry (do not repeat existing lines unless wrapped in sentinels):\n" + afterSys)
+                    : "# Complete or continue this entry (output ONLY the remaining YAML fields and closing sentinel; do not repeat lines already written below):\n" + afterSys)
                 : "";
             return STAMP + insideSys + tailSection + OVERRIDE_FOOTER + "\n</SYSTEM>";
         }
@@ -8568,38 +8671,14 @@ description: {1 concise sentence narrative summary}
                 : "Standalone Entity-Cards bypassed: Another card engine instance is already active in an upstream slot.";
             try { (typeof log === "function" ? log : console.log)(`   [AID WARNING]: Double Engine Detected! ${AutoCards._bypassReason}`); } catch (_) {}
         } else {
-            // Check CSCP at startup if available
-            try {
-                const cscp = typeof loadCSCP === "function" ? loadCSCP() : null;
-                if (cscp && typeof cscp.announce === "function") {
-                    const res = cscp.announce({
-                        name: "entity-cards",
-                        displayName: "EntityCards",
-                        version: typeof EC_BUILD_VERSION === "string" ? EC_BUILD_VERSION : "2.8.0",
-                        provides: ["entity-cards"],
-                        prefix: "/ec",
-                        aliases: ["/ac"],
-                        commands: ["/ec", "/ac"],
-                        description: "Autonomous story cards and named entity recognition for characters & lore",
-                        helpSummary: "Autonomous story cards and lore generation (/ec <title>, /ec redo, /ec info)"
-                    }, { phase: "init" });
-                    if (res && res.yielded && res.yielded.includes("entity-cards")) {
-                        globalThis._AID_DOUBLE_ENGINE_DETECTED = true;
-                        if (typeof state !== "undefined") state._aid_double_engine_detected = true;
-                        AutoCards._isBypassed = true;
-                        AutoCards._bypassReason = "Standalone Entity-Cards bypassed: Upstream slot claimed 'entity-cards' capability.";
-                    }
-                }
-            } catch (_) {}
-
-            if (!AutoCards._isBypassed) {
-                // Primary standalone engine
-                globalThis._AID_STANDALONE_EC = true;
-                globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
-                globalThis._AID_DOUBLE_ENGINE_DETECTED = false;
-                if (typeof state !== "undefined") delete state._aid_double_engine_detected;
-                AutoCards(null);
-            }
+            // Note: Do NOT evaluate CSCP capability yielding during 'init' (sharedLibrary evaluation),
+            // because CSCP only resets owners at the start of an active lifecycle hook ('input', 'context', 'output').
+            // Evaluating yielded during 'init' would compare against stale owners from a prior hook phase/VM.
+            globalThis._AID_STANDALONE_EC = true;
+            globalThis._AID_ACTIVE_CARD_ENGINE_INSTANCE = AutoCards;
+            globalThis._AID_DOUBLE_ENGINE_DETECTED = false;
+            if (typeof state !== "undefined") delete state._aid_double_engine_detected;
+            AutoCards(null);
         }
     } else {
         // This is bundled inside Inner-Entity All-in-One
