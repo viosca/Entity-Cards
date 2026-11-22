@@ -362,6 +362,60 @@ const clean = (s) => (typeof s === "string" ? s.replace(/\u200D\u200B\u200C\u200
     console.log("   ✔ Specific diagnostic: Reserved system keyword accurately identified");
 }
 
+// 12. Legacy state.AutoCards Migration & 100% Completion Without lastConstructed Crash
+{
+    sandbox.storyCards = [];
+    // Simulate an existing adventure save created before 'lastConstructed' existed on AC.generation,
+    // and already sealed/frozen as after a previous hook turn at 75% progress.
+    const legacyGen = {
+        cooldown: 20,
+        completed: 3,
+        permitted: 6,
+        workpiece: Object.seal({
+            title: "Brenner",
+            type: "Person",
+            explicitType: "Person",
+            keys: "Brenner",
+            entry: [
+                "ENTITY_BEGIN",
+                "entity: Brenner",
+                "type: Person",
+                "category: Royal Armorer / Master Artificer",
+                "mbti: ISTP—Virtuoso",
+                "appearance: Burly frame, forearms corded with muscle; short, graying brown hair; wears a heavy leather apron over simple woolens, perpetually smudged with soot and oil. Eyes of pale, sharp blue, like tempered steel."
+            ].join("\n"),
+            description: "Auto-Cards will contextualize these memories:\n{updates: false, limit: 3200}",
+            prompt: "Generate Person card for Brenner\n%{entry}",
+            limit: 600
+        }),
+        pending: []
+        // Note: 'lastConstructed' is intentionally OMITTED here!
+    };
+    Object.seal(legacyGen);
+    sandbox.state.AutoCards = Object.freeze({
+        ...sandbox.state.AutoCards,
+        generation: legacyGen
+    });
+
+    const finalTurnAIOutput = [
+        "connections: Known to Hilda Reiter as the only armorer she trusts with her own gear; potential supplier of high-precision parts for Jonathon's scientific instruments.",
+        "description: The castle's gruff master armorer, whose skill with metal and fire is matched only by his disdain for idle chatter."
+    ].join("\n");
+
+    const finalOut = sandbox.AutoCards("output", finalTurnAIOutput);
+    assert(
+        finalOut.includes('>>> Generated "Brenner" [Person] (100%): Card added to Story Cards!'),
+        `Expected 100% completion banner instead of raw output leak, got: ${finalOut}`
+    );
+    const brennerCard = sandbox.storyCards.find(c => c && c.title === "Brenner");
+    assert(brennerCard, "Expected 'Brenner' Story Card to be constructed in storyCards");
+    assert(brennerCard.entry.includes("category: Royal Armorer / Master Artificer"), "Expected earlier turn fields to be preserved");
+    assert(brennerCard.entry.includes("connections: Known to Hilda Reiter"), "Expected final turn connections field to be merged");
+    assert(brennerCard.entry.includes("description: The castle's gruff master armorer"), "Expected final turn description field to be merged");
+    assert.strictEqual(sandbox.state.AutoCards.generation.lastConstructed?.title, "Brenner", "Expected lastConstructed to be hydrated and updated");
+    console.log("   ✔ Legacy sealed state.AutoCards (missing lastConstructed) completes at 100% and creates Story Card cleanly");
+}
+
 console.log("==================================================================");
-console.log("  🎉 ALL 11 Auto-Cards STANDALONE LIFECYCLE TESTS PASSED (100%)");
+console.log("  🎉 ALL 12 Auto-Cards STANDALONE LIFECYCLE TESTS PASSED (100%)");
 console.log("==================================================================");
