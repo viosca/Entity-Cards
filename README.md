@@ -47,6 +47,8 @@ You can switch between **Entity Cards** mode and **Classic Auto-Cards** mode at 
 * **Dynamic Context Header:** Automatically replaces `"World Lore:"` with a customizable header (default `"Named Entities (NER):"`) during context building, without needing manual edits to your `Context` script tab.
 * **Dual Script & Command Aliases:** Call either `EntityCards(...)` or `AutoCards(...)` in your scenario scripts, and use either `/ec` or `/ac` in-game commands.
 
+> 🧭 **Multi-Slot Architecture:** Running multiple scripts in your adventure? See the [Dynamic Slot Management & Graceful Degradation Guide](docs/DYNAMIC_SLOT_MANAGEMENT_GUIDE.md) for how slots coordinate, self-heal, and gracefully handle being toggled on or off.
+
 ---
 
 ## In-Game Commands
