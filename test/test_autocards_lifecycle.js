@@ -43,11 +43,11 @@ function createMockAIDContext(initialCards = []) {
             let card = (args.length === 1)
                 ? { title: args[0], entry: "", keys: "", type: "class", description: "" }
                 : { keys: args[0], entry: args[1], type: args[2], title: args[3], description: args[4] };
-            cards.push(card);
+            (sandbox.storyCards || cards).push(card);
             return card;
         },
         removeStoryCard(index) {
-            cards.splice(index, 1);
+            (sandbox.storyCards || cards).splice(index, 1);
         }
     };
     sandbox.globalThis = sandbox;
@@ -63,6 +63,11 @@ console.log("   ✔ Script parsed and evaluated cleanly");
 
 assert.strictEqual(typeof sandbox.AutoCards, "function", "AutoCards must be exported");
 assert.strictEqual(typeof sandbox.EntityCards, "function", "EntityCards must be exported");
+const _rawAC = sandbox.AutoCards;
+sandbox.AutoCards = (hook, inT, stop) => {
+    sandbox.text = (typeof inT === "string") ? inT : "";
+    return _rawAC(hook, inT, stop);
+};
 console.log("   ✔ Global exports (AutoCards, EntityCards) verified");
 
 // Check AMS module registration
@@ -261,10 +266,19 @@ const clean = (s) => (typeof s === "string" ? s.replace(/\u200D\u200B\u200C\u200
     assert(sandbox.state.message.includes('Generated "Thorin" [Person] (100%): Card added to Story Cards!'), "Toast mode on 100% must update state.message with completion notice");
     console.log("   ✔ 100% completion in toast mode updates state.message with completion notice");
 
-    sandbox.state.AutoCards.config.progressDisplay = "story"; // restore default
-    sandbox.state.AutoCards.config.doAC = false; // restore default
-    sandbox.state.AutoCards.generation.workpiece = {}; // clean up
-    sandbox.state.AutoCards.generation.completed = 0;
+    sandbox.state.AutoCards = {
+        ...sandbox.state.AutoCards,
+        config: {
+            ...sandbox.state.AutoCards.config,
+            progressDisplay: "story",
+            doAC: false
+        },
+        generation: {
+            ...sandbox.state.AutoCards.generation,
+            workpiece: {},
+            completed: 0
+        }
+    };
 }
 
 // 7. Protected bareword titles: /ec "Info" -org
@@ -365,6 +379,15 @@ const clean = (s) => (typeof s === "string" ? s.replace(/\u200D\u200B\u200C\u200
 // 12. Legacy state.AutoCards Migration & 100% Completion Without lastConstructed Crash
 {
     sandbox.storyCards = [];
+    if (sandbox.state.AutoCards?.signal) {
+        sandbox.state.AutoCards = {
+            ...sandbox.state.AutoCards,
+            signal: {
+                ...sandbox.state.AutoCards.signal,
+                outputReplacement: ""
+            }
+        };
+    }
     // Simulate an existing adventure save created before 'lastConstructed' existed on AC.generation,
     // and already sealed/frozen as after a previous hook turn at 75% progress.
     const legacyGen = {
